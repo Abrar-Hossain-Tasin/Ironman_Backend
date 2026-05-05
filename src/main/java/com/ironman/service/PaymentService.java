@@ -7,6 +7,7 @@ import com.ironman.model.LaundryOrder;
 import com.ironman.model.Payment;
 import com.ironman.model.PaymentStatus;
 import com.ironman.model.User;
+import com.ironman.model.UserRole;
 import com.ironman.repository.LaundryOrderRepository;
 import com.ironman.repository.PaymentRepository;
 import java.time.Instant;
@@ -49,6 +50,16 @@ public class PaymentService {
     return paymentRepository.findByOrderIdOrderByCollectedAtDesc(orderId).stream()
         .map(PaymentResponse::from)
         .toList();
+  }
+
+  public List<PaymentResponse> forOrderScoped(UUID orderId) {
+    User user = principalService.currentUser();
+    LaundryOrder order = orderRepository.findById(orderId)
+        .orElseThrow(() -> new NotFoundException("Order not found"));
+    if (user.getRole() == UserRole.customer && !order.getCustomer().getId().equals(user.getId())) {
+      throw new NotFoundException("Order not found");
+    }
+    return forOrder(orderId);
   }
 
   public List<PaymentResponse> forStaff(UUID staffId) {

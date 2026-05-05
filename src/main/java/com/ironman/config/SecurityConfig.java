@@ -2,7 +2,6 @@ package com.ironman.config;
 
 import com.ironman.repository.UserRepository;
 import java.util.Arrays;
-import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -28,10 +27,12 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
-@RequiredArgsConstructor
 public class SecurityConfig {
+<<<<<<< Updated upstream
  
 
+=======
+>>>>>>> Stashed changes
   @Value("${app.cors.allowed-origins}")
   private String allowedOrigins;
 
@@ -54,6 +55,7 @@ public class SecurityConfig {
   // }
 
   @Bean
+<<<<<<< Updated upstream
 public SecurityFilterChain securityFilterChain(
     HttpSecurity http,
     AuthenticationProvider authenticationProvider,
@@ -74,6 +76,28 @@ public SecurityFilterChain securityFilterChain(
       .build();
 }
 
+=======
+  public SecurityFilterChain securityFilterChain(
+      HttpSecurity http,
+      AuthenticationProvider authenticationProvider,
+      JwtAuthenticationFilter jwtAuthenticationFilter
+  )
+      throws Exception {
+    return http
+        .csrf(csrf -> csrf.disable())
+        .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+        .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+        .authenticationProvider(authenticationProvider)
+        .authorizeHttpRequests(auth -> auth
+            .requestMatchers("/api/v1/health").permitAll()
+            .requestMatchers(HttpMethod.POST, "/api/v1/auth/register", "/api/v1/auth/login", "/api/v1/auth/refresh").permitAll()
+            .requestMatchers(HttpMethod.GET, "/api/v1/services/**", "/api/v1/tracking/**").permitAll()
+            .anyRequest().authenticated()
+        )
+        .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+        .build();
+  }
+>>>>>>> Stashed changes
 
   @Bean
   public UserDetailsService userDetailsService(UserRepository userRepository) {

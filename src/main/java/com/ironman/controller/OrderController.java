@@ -5,7 +5,9 @@ import com.ironman.dto.order.OrderItemResponse;
 import com.ironman.dto.order.OrderResponse;
 import com.ironman.dto.order.PlaceOrderRequest;
 import com.ironman.dto.order.TrackingResponse;
+import com.ironman.dto.payment.PaymentResponse;
 import com.ironman.service.OrderService;
+import com.ironman.service.PaymentService;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class OrderController {
   private final OrderService orderService;
+  private final PaymentService paymentService;
 
   @PostMapping
   public OrderResponse place(@Valid @RequestBody PlaceOrderRequest request) {
@@ -47,6 +50,11 @@ public class OrderController {
   @GetMapping("/{id}/items")
   public List<OrderItemResponse> items(@PathVariable UUID id) {
     return orderService.items(id);
+  }
+
+  @GetMapping("/{id}/payments")
+  public List<PaymentResponse> payments(@PathVariable UUID id) {
+    return paymentService.forOrderScoped(id);
   }
 
   @PutMapping("/{id}/cancel")
