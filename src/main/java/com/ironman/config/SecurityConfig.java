@@ -30,28 +30,50 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 @EnableMethodSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
-  private final JwtAuthenticationFilter jwtAuthenticationFilter;
+ 
 
   @Value("${app.cors.allowed-origins}")
   private String allowedOrigins;
 
+  // @Bean
+  // public SecurityFilterChain securityFilterChain(HttpSecurity http, AuthenticationProvider authenticationProvider)
+  //     throws Exception {
+  //   return http
+  //       .csrf(csrf -> csrf.disable())
+  //       .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+  //       .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+  //       .authenticationProvider(authenticationProvider)
+  //       .authorizeHttpRequests(auth -> auth
+  //           .requestMatchers("/api/v1/health").permitAll()
+  //           .requestMatchers(HttpMethod.POST, "/api/v1/auth/register", "/api/v1/auth/login", "/api/v1/auth/refresh").permitAll()
+  //           .requestMatchers(HttpMethod.GET, "/api/v1/services/**", "/api/v1/tracking/**").permitAll()
+  //           .anyRequest().authenticated()
+  //       )
+  //       .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+  //       .build();
+  // }
+
   @Bean
-  public SecurityFilterChain securityFilterChain(HttpSecurity http, AuthenticationProvider authenticationProvider)
-      throws Exception {
-    return http
-        .csrf(csrf -> csrf.disable())
-        .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-        .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-        .authenticationProvider(authenticationProvider)
-        .authorizeHttpRequests(auth -> auth
-            .requestMatchers("/api/v1/health").permitAll()
-            .requestMatchers(HttpMethod.POST, "/api/v1/auth/register", "/api/v1/auth/login", "/api/v1/auth/refresh").permitAll()
-            .requestMatchers(HttpMethod.GET, "/api/v1/services/**", "/api/v1/tracking/**").permitAll()
-            .anyRequest().authenticated()
-        )
-        .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-        .build();
-  }
+public SecurityFilterChain securityFilterChain(
+    HttpSecurity http,
+    AuthenticationProvider authenticationProvider,
+    JwtAuthenticationFilter jwtAuthenticationFilter
+) throws Exception {
+  return http
+      .csrf(csrf -> csrf.disable())
+      .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+      .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+      .authenticationProvider(authenticationProvider)
+      .authorizeHttpRequests(auth -> auth
+          .requestMatchers("/api/v1/health").permitAll()
+          .requestMatchers(HttpMethod.POST, "/api/v1/auth/register", "/api/v1/auth/login", "/api/v1/auth/refresh").permitAll()
+          .requestMatchers(HttpMethod.GET, "/api/v1/services/**", "/api/v1/tracking/**").permitAll()
+          .anyRequest().authenticated()
+      )
+      .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+      .build();
+}
+
 
   @Bean
   public UserDetailsService userDetailsService(UserRepository userRepository) {
