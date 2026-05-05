@@ -15,6 +15,8 @@ import java.util.UUID;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcType;
+import org.hibernate.dialect.PostgreSQLEnumJdbcType;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -32,7 +34,7 @@ public class User implements UserDetails {
   @Column(name = "full_name", nullable = false)
   private String fullName;
 
-  @Column(nullable = false, unique = true)
+  @Column(nullable = false, unique = true, columnDefinition = "citext")
   private String email;
 
   @Column(nullable = false)
@@ -42,6 +44,7 @@ public class User implements UserDetails {
   private String passwordHash;
 
   @Enumerated(EnumType.STRING)
+  @JdbcType(PostgreSQLEnumJdbcType.class)
   @Column(nullable = false, columnDefinition = "user_role")
   private UserRole role = UserRole.customer;
 

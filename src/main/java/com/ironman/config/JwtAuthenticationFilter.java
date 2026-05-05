@@ -20,6 +20,27 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
   private final UserDetailsService userDetailsService;
 
   @Override
+  protected boolean shouldNotFilter(HttpServletRequest request) {
+    String path = request.getRequestURI();
+    String contextPath = request.getContextPath();
+    if (contextPath != null && !contextPath.isBlank() && path.startsWith(contextPath)) {
+      path = path.substring(contextPath.length());
+    }
+    String method = request.getMethod();
+    return "OPTIONS".equalsIgnoreCase(method)
+        || ("GET".equalsIgnoreCase(method) && "/api/v1/health".equals(path))
+        || ("GET".equalsIgnoreCase(method) && "/api/v1/services".equals(path))
+        || ("GET".equalsIgnoreCase(method) && path.startsWith("/api/v1/services/"))
+        || ("GET".equalsIgnoreCase(method) && "/api/v1/tracking".equals(path))
+        || ("GET".equalsIgnoreCase(method) && path.startsWith("/api/v1/tracking/"))
+        || ("POST".equalsIgnoreCase(method) && (
+            "/api/v1/auth/register".equals(path)
+                || "/api/v1/auth/login".equals(path)
+                || "/api/v1/auth/refresh".equals(path)
+        ));
+  }
+
+  @Override
   protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
       throws ServletException, IOException {
     String header = request.getHeader("Authorization");

@@ -17,6 +17,8 @@ import java.util.UUID;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcType;
+import org.hibernate.dialect.PostgreSQLEnumJdbcType;
 
 @Getter
 @Setter
@@ -40,6 +42,7 @@ public class Payment {
   private BigDecimal amount;
 
   @Enumerated(EnumType.STRING)
+  @JdbcType(PostgreSQLEnumJdbcType.class)
   @Column(name = "payment_type", nullable = false, columnDefinition = "payment_type")
   private PaymentType paymentType;
 

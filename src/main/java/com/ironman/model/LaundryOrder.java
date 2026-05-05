@@ -18,6 +18,8 @@ import java.util.UUID;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcType;
+import org.hibernate.dialect.PostgreSQLEnumJdbcType;
 
 @Getter
 @Setter
@@ -60,14 +62,17 @@ public class LaundryOrder {
   private String specialInstructions;
 
   @Enumerated(EnumType.STRING)
+  @JdbcType(PostgreSQLEnumJdbcType.class)
   @Column(nullable = false, columnDefinition = "order_status")
   private OrderStatus status = OrderStatus.pending;
 
   @Enumerated(EnumType.STRING)
+  @JdbcType(PostgreSQLEnumJdbcType.class)
   @Column(name = "payment_method", nullable = false, columnDefinition = "payment_method")
   private PaymentMethod paymentMethod = PaymentMethod.cod;
 
   @Enumerated(EnumType.STRING)
+  @JdbcType(PostgreSQLEnumJdbcType.class)
   @Column(name = "payment_status", nullable = false, columnDefinition = "payment_status")
   private PaymentStatus paymentStatus = PaymentStatus.pending;
 

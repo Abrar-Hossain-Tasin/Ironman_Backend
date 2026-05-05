@@ -16,6 +16,8 @@ import java.util.UUID;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcType;
+import org.hibernate.dialect.PostgreSQLEnumJdbcType;
 
 @Getter
 @Setter
@@ -36,6 +38,7 @@ public class OrderAssignment {
   private User assignedTo;
 
   @Enumerated(EnumType.STRING)
+  @JdbcType(PostgreSQLEnumJdbcType.class)
   @Column(name = "assignment_type", nullable = false, columnDefinition = "assignment_type")
   private AssignmentType assignmentType;
 
@@ -53,6 +56,7 @@ public class OrderAssignment {
   private Instant completedAt;
 
   @Enumerated(EnumType.STRING)
+  @JdbcType(PostgreSQLEnumJdbcType.class)
   @Column(nullable = false, columnDefinition = "assignment_status")
   private AssignmentStatus status = AssignmentStatus.pending;
 

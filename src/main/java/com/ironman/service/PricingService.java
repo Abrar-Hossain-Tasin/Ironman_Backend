@@ -25,18 +25,21 @@ public class PricingService {
   private final ServicePricingRepository servicePricingRepository;
   private final PrincipalService principalService;
 
+  @Transactional(readOnly = true)
   public List<ServiceCategoryResponse> activeCategories() {
     return serviceCategoryRepository.findByActiveTrueOrderByDisplayOrderAscNameAsc().stream()
         .map(ServiceCategoryResponse::from)
         .toList();
   }
 
+  @Transactional(readOnly = true)
   public List<ClothingTypeResponse> activeClothingTypes() {
     return clothingTypeRepository.findByActiveTrueOrderByDisplayOrderAscNameAsc().stream()
         .map(ClothingTypeResponse::from)
         .toList();
   }
 
+  @Transactional(readOnly = true)
   public List<PricingResponse> currentPricing() {
     return servicePricingRepository.findByCurrentTrueOrderByClothingTypeDisplayOrderAscServiceCategoryDisplayOrderAsc()
         .stream()
@@ -44,12 +47,14 @@ public class PricingService {
         .toList();
   }
 
+  @Transactional(readOnly = true)
   public PricingResponse currentPrice(UUID categoryId, UUID clothingTypeId) {
     return servicePricingRepository.findByServiceCategoryIdAndClothingTypeIdAndCurrentTrue(categoryId, clothingTypeId)
         .map(PricingResponse::from)
         .orElseThrow(() -> new NotFoundException("Current price not found"));
   }
 
+  @Transactional(readOnly = true)
   public List<PricingResponse> history() {
     return servicePricingRepository.findByOrderByCreatedAtDesc().stream()
         .map(PricingResponse::from)
