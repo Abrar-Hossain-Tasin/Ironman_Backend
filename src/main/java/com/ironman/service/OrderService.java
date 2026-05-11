@@ -37,24 +37,43 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class OrderService {
+
   private static final ZoneId DHAKA = ZoneId.of("Asia/Dhaka");
   private static final Map<OrderStatus, Set<OrderStatus>> ALLOWED_TRANSITIONS = Map.ofEntries(
-      Map.entry(OrderStatus.pending, Set.of(OrderStatus.confirmed, OrderStatus.cancelled)),
-      Map.entry(OrderStatus.confirmed, Set.of(OrderStatus.pickup_assigned, OrderStatus.cancelled)),
-      Map.entry(OrderStatus.pickup_assigned, Set.of(OrderStatus.picked_up, OrderStatus.cancelled)),
-      Map.entry(OrderStatus.picked_up, Set.of(OrderStatus.in_wash, OrderStatus.in_dry_clean, OrderStatus.waiting_for_iron, OrderStatus.in_iron, OrderStatus.ready, OrderStatus.cancelled)),
-      Map.entry(OrderStatus.in_wash, Set.of(OrderStatus.wash_complete, OrderStatus.cancelled)),
-      Map.entry(OrderStatus.wash_complete, Set.of(OrderStatus.waiting_for_iron, OrderStatus.in_iron, OrderStatus.ready, OrderStatus.cancelled)),
-      Map.entry(OrderStatus.in_dry_clean, Set.of(OrderStatus.dry_clean_complete, OrderStatus.cancelled)),
-      Map.entry(OrderStatus.dry_clean_complete, Set.of(OrderStatus.waiting_for_iron, OrderStatus.in_iron, OrderStatus.ready, OrderStatus.cancelled)),
-      Map.entry(OrderStatus.waiting_for_iron, Set.of(OrderStatus.in_iron, OrderStatus.cancelled)),
-      Map.entry(OrderStatus.in_iron, Set.of(OrderStatus.iron_complete, OrderStatus.cancelled)),
-      Map.entry(OrderStatus.iron_complete, Set.of(OrderStatus.ready, OrderStatus.cancelled)),
-      Map.entry(OrderStatus.ready, Set.of(OrderStatus.delivery_assigned, OrderStatus.cancelled)),
-      Map.entry(OrderStatus.delivery_assigned, Set.of(OrderStatus.out_for_delivery, OrderStatus.cancelled)),
-      Map.entry(OrderStatus.out_for_delivery, Set.of(OrderStatus.delivered, OrderStatus.cancelled)),
-      Map.entry(OrderStatus.delivered, Set.of()),
-      Map.entry(OrderStatus.cancelled, Set.of())
+          Map.entry(OrderStatus.pending,
+                  Set.of(OrderStatus.confirmed, OrderStatus.cancelled)),
+          Map.entry(OrderStatus.confirmed,
+                  Set.of(OrderStatus.pickup_assigned, OrderStatus.cancelled)),
+          Map.entry(OrderStatus.pickup_assigned,
+                  Set.of(OrderStatus.picked_up, OrderStatus.cancelled)),
+          Map.entry(OrderStatus.picked_up,
+                  Set.of(OrderStatus.in_wash, OrderStatus.in_dry_clean,
+                          OrderStatus.waiting_for_iron, OrderStatus.in_iron,
+                          OrderStatus.ready, OrderStatus.cancelled)),
+          Map.entry(OrderStatus.in_wash,
+                  Set.of(OrderStatus.wash_complete, OrderStatus.cancelled)),
+          Map.entry(OrderStatus.wash_complete,
+                  Set.of(OrderStatus.waiting_for_iron, OrderStatus.in_iron,
+                          OrderStatus.ready, OrderStatus.cancelled)),
+          Map.entry(OrderStatus.in_dry_clean,
+                  Set.of(OrderStatus.dry_clean_complete, OrderStatus.cancelled)),
+          Map.entry(OrderStatus.dry_clean_complete,
+                  Set.of(OrderStatus.waiting_for_iron, OrderStatus.in_iron,
+                          OrderStatus.ready, OrderStatus.cancelled)),
+          Map.entry(OrderStatus.waiting_for_iron,
+                  Set.of(OrderStatus.in_iron, OrderStatus.cancelled)),
+          Map.entry(OrderStatus.in_iron,
+                  Set.of(OrderStatus.iron_complete, OrderStatus.cancelled)),
+          Map.entry(OrderStatus.iron_complete,
+                  Set.of(OrderStatus.ready, OrderStatus.cancelled)),
+          Map.entry(OrderStatus.ready,
+                  Set.of(OrderStatus.delivery_assigned, OrderStatus.cancelled)),
+          Map.entry(OrderStatus.delivery_assigned,
+                  Set.of(OrderStatus.out_for_delivery, OrderStatus.cancelled)),
+          Map.entry(OrderStatus.out_for_delivery,
+                  Set.of(OrderStatus.delivered, OrderStatus.cancelled)),
+          Map.entry(OrderStatus.delivered, Set.of()),
+          Map.entry(OrderStatus.cancelled, Set.of())
   );
 
   private final PrincipalService principalService;
@@ -67,6 +86,7 @@ public class OrderService {
   private final ServiceCategoryRepository serviceCategoryRepository;
   private final CustomerProfileRepository customerProfileRepository;
   private final NotificationService notificationService;
+  private final EmailService emailService;
 
   @Transactional
   public OrderResponse placeOrder(PlaceOrderRequest request) {
@@ -75,10 +95,12 @@ public class OrderService {
       throw new BadRequestException("Only customers can place orders");
     }
 
-    var pickupAddress = addressRepository.findByIdAndUserId(request.pickupAddressId(), customer.getId())
-        .orElseThrow(() -> new NotFoundException("Pickup address not found"));
-    var deliveryAddress = addressRepository.findByIdAndUserId(request.deliveryAddressId(), customer.getId())
-        .orElseThrow(() -> new NotFoundException("Delivery address not found"));
+    var pickupAddress = addressRepository
+            .findByIdAndUserId(request.pickupAddressId(), customer.getId())
+            .orElseThrow(() -> new NotFoundException("Pickup address not found"));
+    var deliveryAddress = addressRepository
+            .findByIdAndUserId(request.deliveryAddressId(), customer.getId())
+            .orElseThrow(() -> new NotFoundException("Delivery address not found"));
 
     var order = new LaundryOrder();
     order.setCustomer(customer);
@@ -97,11 +119,15 @@ public class OrderService {
     BigDecimal total = BigDecimal.ZERO;
     for (var requestItem : request.items()) {
       var clothingType = clothingTypeRepository.findById(requestItem.clothingTypeId())
-          .orElseThrow(() -> new NotFoundException("Clothing type not found"));
+              .orElseThrow(() -> new NotFoundException("Clothing type not found"));
       var category = serviceCategoryRepository.findById(requestItem.serviceCategoryId())
-          .orElseThrow(() -> new NotFoundException("Service category not found"));
-      var pricing = servicePricingRepository.findByServiceCategoryIdAndClothingTypeIdAndCurrentTrue(category.getId(), clothingType.getId())
-          .orElseThrow(() -> new BadRequestException("Pricing is unavailable for " + category.getName() + " / " + clothingType.getName()));
+              .orElseThrow(() -> new NotFoundException("Service category not found"));
+      var pricing = servicePricingRepository
+              .findByServiceCategoryIdAndClothingTypeIdAndCurrentTrue(
+                      category.getId(), clothingType.getId())
+              .orElseThrow(() -> new BadRequestException(
+                      "Pricing is unavailable for " + category.getName()
+                              + " / " + clothingType.getName()));
 
       var subtotal = pricing.getPrice().multiply(BigDecimal.valueOf(requestItem.quantity()));
       var item = new OrderItem();
@@ -125,11 +151,30 @@ public class OrderService {
       customerProfileRepository.save(profile);
     });
 
+    // In-app + email notification to admins
+    final LaundryOrder savedOrder = order;
     notificationService.notifyAdmins(
-        "New order " + order.getOrderNumber(),
-        customer.getFullName() + " placed a BDT " + order.getTotalAmount() + " order.",
-        "order_created",
-        order.getId()
+            "New order " + order.getOrderNumber(),
+            customer.getFullName() + " placed a BDT " + order.getTotalAmount() + " order.",
+            "order_created",
+            order.getId()
+    );
+    // Send a richer admin alert email separately
+    final String orderNum = order.getOrderNumber();
+    final String amount = order.getTotalAmount().toPlainString();
+    notificationService.notifyAdmins(
+            "[ADMIN] New Order — " + orderNum,
+            customer.getFullName() + " placed a BDT " + amount + " order. Please confirm.",
+            "order_created_admin",
+            order.getId()
+    );
+
+    // Confirmation email to the customer
+    emailService.sendOrderPlaced(
+            customer.getEmail(),
+            customer.getFullName(),
+            order.getOrderNumber(),
+            order.getTotalAmount().toPlainString()
     );
 
     return toResponse(order);
@@ -139,16 +184,16 @@ public class OrderService {
   public List<OrderResponse> listMineOrAll() {
     User user = principalService.currentUser();
     List<LaundryOrder> orders = user.getRole() == UserRole.admin
-        ? orderRepository.findAllByOrderByCreatedAtDesc()
-        : orderRepository.findByCustomerIdOrderByCreatedAtDesc(user.getId());
+            ? orderRepository.findAllByOrderByCreatedAtDesc()
+            : orderRepository.findByCustomerIdOrderByCreatedAtDesc(user.getId());
     return orders.stream().map(this::toResponse).toList();
   }
 
   @Transactional(readOnly = true)
   public List<OrderResponse> listAdmin(OrderStatus status) {
     List<LaundryOrder> orders = status == null
-        ? orderRepository.findAllByOrderByCreatedAtDesc()
-        : orderRepository.findByStatusOrderByCreatedAtDesc(status);
+            ? orderRepository.findAllByOrderByCreatedAtDesc()
+            : orderRepository.findByStatusOrderByCreatedAtDesc(status);
     return orders.stream().map(this::toResponse).toList();
   }
 
@@ -161,34 +206,36 @@ public class OrderService {
   public List<OrderItemResponse> items(UUID id) {
     LaundryOrder order = scopedOrder(id);
     return orderItemRepository.findByOrderId(order.getId()).stream()
-        .map(OrderItemResponse::from)
-        .toList();
+            .map(OrderItemResponse::from)
+            .toList();
   }
 
   @Transactional(readOnly = true)
   public List<TrackingResponse> tracking(UUID id) {
     LaundryOrder order = scopedOrder(id);
     return trackingRepository.findByOrderIdOrderByTimestampAsc(order.getId()).stream()
-        .map(TrackingResponse::from)
-        .toList();
+            .map(TrackingResponse::from)
+            .toList();
   }
 
   @Transactional(readOnly = true)
   public List<TrackingResponse> publicTracking(String orderNumber) {
     LaundryOrder order = orderRepository.findByOrderNumber(orderNumber)
-        .orElseThrow(() -> new NotFoundException("Order not found"));
+            .orElseThrow(() -> new NotFoundException("Order not found"));
     return trackingRepository.findByOrderIdOrderByTimestampAsc(order.getId()).stream()
-        .map(TrackingResponse::from)
-        .toList();
+            .map(TrackingResponse::from)
+            .toList();
   }
 
   @Transactional
   public OrderResponse cancel(UUID id) {
     LaundryOrder order = scopedOrder(id);
-    if (!Set.of(OrderStatus.pending, OrderStatus.confirmed, OrderStatus.pickup_assigned).contains(order.getStatus())) {
+    if (!Set.of(OrderStatus.pending, OrderStatus.confirmed, OrderStatus.pickup_assigned)
+            .contains(order.getStatus())) {
       throw new BadRequestException("Order cannot be cancelled after pickup");
     }
-    return updateStatus(order, OrderStatus.cancelled, "Order cancelled", principalService.currentUser());
+    return updateStatus(order, OrderStatus.cancelled, "Order cancelled",
+            principalService.currentUser());
   }
 
   @Transactional
@@ -197,22 +244,55 @@ public class OrderService {
   }
 
   @Transactional
-  public OrderResponse updateStatus(LaundryOrder order, OrderStatus next, String reason, User actor) {
+  public OrderResponse updateStatus(LaundryOrder order, OrderStatus next, String reason,
+                                    User actor) {
     if (order.getStatus() == next) {
       return toResponse(order);
     }
     validateTransition(order.getStatus(), next);
     order.setStatus(next);
     order = orderRepository.save(order);
-    addTracking(order, next, reason == null || reason.isBlank() ? statusLabel(next) : reason, actor);
+    addTracking(order, next,
+            reason == null || reason.isBlank() ? statusLabel(next) : reason, actor);
+
+    User customer = order.getCustomer();
+    String notifBody = customerNotification(next, order.getOrderNumber());
+
+    // In-app notification
     notificationService.notifyUser(
-        order.getCustomer(),
-        statusLabel(next),
-        customerNotification(next, order.getOrderNumber()),
-        "order_status",
-        order.getId()
-    );
+            customer, statusLabel(next), notifBody, "order_status", order.getId());
+
+    // Targeted email for key lifecycle events
+    sendLifecycleEmail(customer, order, next, actor);
+
     return toResponse(order);
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+
+  private void sendLifecycleEmail(User customer, LaundryOrder order,
+                                  OrderStatus next, User actor) {
+    switch (next) {
+      case confirmed ->
+              emailService.sendOrderConfirmed(
+                      customer.getEmail(), customer.getFullName(), order.getOrderNumber());
+      case pickup_assigned ->
+              emailService.sendPickupAssigned(
+                      customer.getEmail(), customer.getFullName(),
+                      order.getOrderNumber(), actor.getFullName());
+      case delivery_assigned ->
+              emailService.sendDeliveryAssigned(
+                      customer.getEmail(), customer.getFullName(),
+                      order.getOrderNumber(), actor.getFullName());
+      case delivered ->
+              emailService.sendOrderDelivered(
+                      customer.getEmail(), customer.getFullName(), order.getOrderNumber());
+      default ->
+              emailService.sendOrderStatusUpdate(
+                      customer.getEmail(), customer.getFullName(),
+                      order.getOrderNumber(), statusLabel(next),
+                      customerNotification(next, order.getOrderNumber()));
+    }
   }
 
   public String statusLabel(OrderStatus status) {
@@ -239,8 +319,9 @@ public class OrderService {
   private LaundryOrder scopedOrder(UUID id) {
     User user = principalService.currentUser();
     LaundryOrder order = orderRepository.findById(id)
-        .orElseThrow(() -> new NotFoundException("Order not found"));
-    if (user.getRole() == UserRole.customer && !order.getCustomer().getId().equals(user.getId())) {
+            .orElseThrow(() -> new NotFoundException("Order not found"));
+    if (user.getRole() == UserRole.customer
+            && !order.getCustomer().getId().equals(user.getId())) {
       throw new NotFoundException("Order not found");
     }
     return order;
@@ -248,11 +329,13 @@ public class OrderService {
 
   private void validateTransition(OrderStatus current, OrderStatus next) {
     if (!ALLOWED_TRANSITIONS.getOrDefault(current, Set.of()).contains(next)) {
-      throw new BadRequestException("Invalid status transition: " + current + " -> " + next);
+      throw new BadRequestException(
+              "Invalid status transition: " + current + " -> " + next);
     }
   }
 
-  private void addTracking(LaundryOrder order, OrderStatus status, String description, User actor) {
+  private void addTracking(LaundryOrder order, OrderStatus status, String description,
+                           User actor) {
     var tracking = new OrderTracking();
     tracking.setOrder(order);
     tracking.setStatus(status.name());
@@ -263,9 +346,10 @@ public class OrderService {
   }
 
   private OrderResponse toResponse(LaundryOrder order) {
-    return OrderResponse.from(order, orderItemRepository.findByOrderId(order.getId()).stream()
-        .map(OrderItemResponse::from)
-        .toList());
+    return OrderResponse.from(order,
+            orderItemRepository.findByOrderId(order.getId()).stream()
+                    .map(OrderItemResponse::from)
+                    .toList());
   }
 
   private String nextOrderNumber() {
@@ -273,7 +357,8 @@ public class OrderService {
     Instant start = today.atStartOfDay(DHAKA).toInstant();
     Instant end = today.plusDays(1).atStartOfDay(DHAKA).toInstant();
     long sequence = orderRepository.countByCreatedAtBetween(start, end) + 1;
-    return "IRM-" + today.format(DateTimeFormatter.BASIC_ISO_DATE) + "-" + String.format("%04d", sequence);
+    return "IRM-" + today.format(DateTimeFormatter.BASIC_ISO_DATE)
+            + "-" + String.format("%04d", sequence);
   }
 
   private String customerNotification(OrderStatus status, String orderNumber) {

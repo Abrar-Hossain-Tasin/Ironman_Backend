@@ -1,10 +1,49 @@
+#server:
+#  port: ${PORT:8080}
+#
+#spring:
+#  application:
+#    name: ironman-backend
+#
+#  main:
+#    allow-circular-references: true
+#
+#  datasource:
+#    url: ${SPRING_DATASOURCE_URL:${SUPABASE_DB_URL:jdbc:postgresql://localhost:5432/ironman}}
+#    username: ${SPRING_DATASOURCE_USERNAME:${SUPABASE_DB_USERNAME:postgres}}
+#    password: ${SPRING_DATASOURCE_PASSWORD:${SUPABASE_DB_PASSWORD:postgres}}
+#    driver-class-name: org.postgresql.Driver
+#
+#  jpa:
+#    hibernate:
+#      ddl-auto: validate
+#    open-in-view: false
+#    properties:
+#      hibernate:
+#        dialect: org.hibernate.dialect.PostgreSQLDialect
+#        jdbc:
+#          time_zone: Asia/Dhaka
+#
+#app:
+#  jwt:
+#    secret: ${JWT_SECRET:dev-secret-for-local-only-change-in-production-make-sure-it-is-long-enough}
+#    access-token-minutes: ${JWT_ACCESS_TOKEN_MINUTES:60}
+#    refresh-token-days: ${JWT_REFRESH_TOKEN_DAYS:14}
+#  cors:
+#    allowed-origins: ${ALLOWED_ORIGINS:http://localhost:3000}
+#  timezone: Asia/Dhaka
+#
+#springdoc:
+#  api-docs:
+#    enabled: true
+
 server:
   port: ${PORT:8080}
 
 spring:
   application:
     name: ironman-backend
-  
+
   main:
     allow-circular-references: true
 
@@ -24,6 +63,24 @@ spring:
         jdbc:
           time_zone: Asia/Dhaka
 
+  # ── Mail ────────────────────────────────────────────────────────────────────
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ironman.bd777@gmail.com
+    password: wbhr ooul vocv fxex
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+
+  # ── Async thread pool (for EmailService) ────────────────────────────────────
+  task:
+    execution:
+      pool:
+        core-size: 2
+        max-size: 5
+        queue-capacity: 100
+
 app:
   jwt:
     secret: ${JWT_SECRET:dev-secret-for-local-only-change-in-production-make-sure-it-is-long-enough}
@@ -32,6 +89,9 @@ app:
   cors:
     allowed-origins: ${ALLOWED_ORIGINS:http://localhost:3000}
   timezone: Asia/Dhaka
+  mail:
+    enabled: true   # set to true in production
+    from: noreply@ironman-laundry.com
 
 springdoc:
   api-docs:

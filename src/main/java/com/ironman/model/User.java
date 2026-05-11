@@ -60,11 +60,16 @@ public class User implements UserDetails {
   @Column(name = "updated_at", nullable = false)
   private Instant updatedAt = Instant.now();
 
+  // components/com.ironman.model.User.java
+
   @Override
   public Collection<? extends GrantedAuthority> getAuthorities() {
-    return List.of(new SimpleGrantedAuthority("ROLE_" + role.name().toUpperCase()));
+    // This adds both "ROLE_DELIVERY_MAN" and "delivery_man" to the user's permissions
+    return List.of(
+            new SimpleGrantedAuthority("ROLE_" + role.name().toUpperCase()),
+            new SimpleGrantedAuthority(role.name())
+    );
   }
-
   @Override
   public String getPassword() {
     return passwordHash;
