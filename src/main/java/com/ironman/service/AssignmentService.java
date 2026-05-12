@@ -24,6 +24,7 @@ public class AssignmentService {
   private final OrderAssignmentRepository assignmentRepository;
   private final OrderService orderService;
 
+  @Transactional(readOnly = true)
   public List<AssignmentResponse> mine() {
     return assignmentRepository.findByAssignedToIdOrderByAssignedAtDesc(principalService.currentUser().getId())
         .stream()

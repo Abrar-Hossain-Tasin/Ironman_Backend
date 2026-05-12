@@ -5,6 +5,7 @@ import com.ironman.dto.order.OrderItemResponse;
 import com.ironman.dto.order.OrderResponse;
 import com.ironman.dto.order.PlaceOrderRequest;
 import com.ironman.dto.order.TrackingResponse;
+import com.ironman.dto.payment.BkashMerchantPaymentRequest;
 import com.ironman.dto.payment.PaymentResponse;
 import com.ironman.service.OrderService;
 import com.ironman.service.PaymentService;
@@ -55,6 +56,14 @@ public class OrderController {
   @GetMapping("/{id}/payments")
   public List<PaymentResponse> payments(@PathVariable UUID id) {
     return paymentService.forOrderScoped(id);
+  }
+
+  @PostMapping("/{id}/payments/bkash")
+  public PaymentResponse submitBkashPayment(
+      @PathVariable UUID id,
+      @Valid @RequestBody BkashMerchantPaymentRequest request
+  ) {
+    return paymentService.recordMerchantBkash(id, request);
   }
 
   @PutMapping("/{id}/cancel")

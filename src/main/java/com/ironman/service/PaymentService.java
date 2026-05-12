@@ -1,11 +1,14 @@
 package com.ironman.service;
 
+import com.ironman.config.BadRequestException;
 import com.ironman.config.NotFoundException;
+import com.ironman.dto.payment.BkashMerchantPaymentRequest;
 import com.ironman.dto.payment.PaymentRecordRequest;
 import com.ironman.dto.payment.PaymentResponse;
 import com.ironman.model.LaundryOrder;
 import com.ironman.model.Payment;
 import com.ironman.model.PaymentStatus;
+import com.ironman.model.PaymentType;
 import com.ironman.model.User;
 import com.ironman.model.UserRole;
 import com.ironman.repository.LaundryOrderRepository;
@@ -29,29 +32,67 @@ public class PaymentService {
     User collector = principalService.currentUser();
     LaundryOrder order = orderRepository.findById(request.orderId())
         .orElseThrow(() -> new NotFoundException("Order not found"));
+    if (request.paymentType() != PaymentType.cod_pickup && request.paymentType() != PaymentType.cod_delivery) {
+      throw new BadRequestException("Delivery staff can only confirm direct customer payments");
+    }
 
     var payment = new Payment();
     payment.setOrder(order);
     payment.setCollectedBy(collector);
     payment.setAmount(request.amount());
     payment.setPaymentType(request.paymentType());
+    payment.setPaymentReference(blankToNull(request.paymentReference()));
+    payment.setPayerPhone(blankToNull(request.payerPhone()));
     payment.setNotes(request.notes());
+    payment.setVerified(true);
+    payment.setVerifiedBy(collector);
+    payment.setVerifiedAt(Instant.now());
     payment = paymentRepository.save(payment);
 
-    var paid = order.getPaidAmount().add(request.amount());
-    order.setPaidAmount(paid);
-    order.setPaymentStatus(paid.compareTo(order.getTotalAmount()) >= 0 ? PaymentStatus.paid : PaymentStatus.partial);
-    orderRepository.save(order);
+    applyPaidAmount(order, request.amount());
 
     return PaymentResponse.from(payment);
   }
 
+  @Transactional
+  public PaymentResponse recordMerchantBkash(UUID orderId, BkashMerchantPaymentRequest request) {
+    User customer = principalService.currentUser();
+    LaundryOrder order = orderRepository.findById(orderId)
+        .orElseThrow(() -> new NotFoundException("Order not found"));
+    if (customer.getRole() != UserRole.customer || !order.getCustomer().getId().equals(customer.getId())) {
+      throw new NotFoundException("Order not found");
+    }
+
+    String transactionId = blankToNull(request.transactionId());
+    if (transactionId == null) {
+      throw new BadRequestException("bKash transaction ID is required");
+    }
+    if (paymentRepository.existsByPaymentReferenceIgnoreCase(transactionId)) {
+      throw new BadRequestException("This bKash transaction ID has already been submitted");
+    }
+
+    var payment = new Payment();
+    payment.setOrder(order);
+    payment.setAmount(request.amount());
+    payment.setPaymentType(PaymentType.bkash_merchant);
+    payment.setPaymentReference(transactionId);
+    payment.setPayerPhone(blankToNull(request.payerPhone()));
+    payment.setNotes(request.notes());
+    payment = paymentRepository.save(payment);
+
+    applyPaidAmount(order, request.amount());
+
+    return PaymentResponse.from(payment);
+  }
+
+  @Transactional(readOnly = true)
   public List<PaymentResponse> forOrder(UUID orderId) {
     return paymentRepository.findByOrderIdOrderByCollectedAtDesc(orderId).stream()
         .map(PaymentResponse::from)
         .toList();
   }
 
+  @Transactional(readOnly = true)
   public List<PaymentResponse> forOrderScoped(UUID orderId) {
     User user = principalService.currentUser();
     LaundryOrder order = orderRepository.findById(orderId)
@@ -62,12 +103,14 @@ public class PaymentService {
     return forOrder(orderId);
   }
 
+  @Transactional(readOnly = true)
   public List<PaymentResponse> forStaff(UUID staffId) {
     return paymentRepository.findByCollectedByIdOrderByCollectedAtDesc(staffId).stream()
         .map(PaymentResponse::from)
         .toList();
   }
 
+  @Transactional(readOnly = true)
   public List<PaymentResponse> ledger() {
     return paymentRepository.findAllByOrderByCollectedAtDesc().stream()
         .map(PaymentResponse::from)
@@ -83,5 +126,28 @@ public class PaymentService {
     payment.setVerifiedBy(admin);
     payment.setVerifiedAt(Instant.now());
     return PaymentResponse.from(paymentRepository.save(payment));
+  }
+
+  private void applyPaidAmount(LaundryOrder order, java.math.BigDecimal amount) {
+    java.math.BigDecimal due = order.getTotalAmount().subtract(order.getPaidAmount());
+    if (due.signum() <= 0) {
+      throw new BadRequestException("Order is already paid");
+    }
+    if (amount.compareTo(due) > 0) {
+      throw new BadRequestException("Payment cannot exceed remaining due: " + due);
+    }
+    var paid = order.getPaidAmount().add(amount);
+    order.setPaidAmount(paid);
+    order.setPaymentStatus(
+        paid.compareTo(order.getTotalAmount()) >= 0 ? PaymentStatus.paid : PaymentStatus.partial
+    );
+    orderRepository.save(order);
+  }
+
+  private String blankToNull(String value) {
+    if (value == null || value.isBlank()) {
+      return null;
+    }
+    return value.trim();
   }
 }

@@ -10,5 +10,7 @@ public record PaymentRecordRequest(
     @NotNull UUID orderId,
     @Positive BigDecimal amount,
     @NotNull PaymentType paymentType,
+    String paymentReference,
+    String payerPhone,
     String notes
 ) {}

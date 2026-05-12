@@ -16,8 +16,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-//@PreAuthorize("hasRole('DELIVERY_MAN')")
-@PreAuthorize("hasRole('delivery_man')")
+@PreAuthorize("hasRole('DELIVERY_MAN')")
 @RestController
 @RequestMapping("/api/v1/delivery")
 @RequiredArgsConstructor

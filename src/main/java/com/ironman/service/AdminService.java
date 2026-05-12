@@ -188,11 +188,13 @@ public class AdminService {
     return AssignmentResponse.from(assignment);
   }
 
+  @Transactional(readOnly = true)
   public List<AssignmentResponse> assignments() {
     return assignmentRepository.findAllByOrderByAssignedAtDesc()
             .stream().map(AssignmentResponse::from).toList();
   }
 
+  @Transactional(readOnly = true)
   public List<UserSummary> staff(UserRole role) {
     var roles = List.of(UserRole.delivery_man, UserRole.wash_man,
             UserRole.iron_man, UserRole.dry_clean_man);

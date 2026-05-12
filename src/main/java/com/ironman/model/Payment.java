@@ -49,6 +49,12 @@ public class Payment {
   @Column(name = "collected_at", nullable = false)
   private Instant collectedAt = Instant.now();
 
+  @Column(name = "payment_reference")
+  private String paymentReference;
+
+  @Column(name = "payer_phone")
+  private String payerPhone;
+
   private String notes;
 
   @Column(name = "is_verified", nullable = false)

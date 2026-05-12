@@ -11,4 +11,6 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID> {
   List<Payment> findByCollectedByIdOrderByCollectedAtDesc(UUID staffId);
 
   List<Payment> findAllByOrderByCollectedAtDesc();
+
+  boolean existsByPaymentReferenceIgnoreCase(String paymentReference);
 }

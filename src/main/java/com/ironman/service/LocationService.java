@@ -1,12 +1,18 @@
 package com.ironman.service;
 
+import com.ironman.config.BadRequestException;
 import com.ironman.config.NotFoundException;
 import com.ironman.dto.location.LocationResponse;
 import com.ironman.dto.location.LocationUpdateRequest;
+import com.ironman.model.AssignmentStatus;
+import com.ironman.model.AssignmentType;
 import com.ironman.model.DeliveryLocation;
+import com.ironman.model.LaundryOrder;
 import com.ironman.model.User;
+import com.ironman.model.UserRole;
 import com.ironman.repository.DeliveryLocationRepository;
 import com.ironman.repository.LaundryOrderRepository;
+import com.ironman.repository.OrderAssignmentRepository;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -25,14 +31,17 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 @RequiredArgsConstructor
 public class LocationService {
 
+    private static final List<AssignmentType> TRACKABLE_ASSIGNMENT_TYPES =
+            List.of(AssignmentType.pickup, AssignmentType.delivery);
+    private static final List<AssignmentStatus> ACTIVE_ASSIGNMENT_STATUSES =
+            List.of(AssignmentStatus.accepted, AssignmentStatus.in_progress);
+
     private final PrincipalService principalService;
     private final DeliveryLocationRepository locationRepository;
     private final LaundryOrderRepository orderRepository;
+    private final OrderAssignmentRepository assignmentRepository;
 
-    // In-memory SSE subscribers per orderId
     private final Map<UUID, List<SseEmitter>> subscribers = new ConcurrentHashMap<>();
-
-    // ── Delivery man: push location ────────────────────────────────────────────
 
     @Transactional
     public LocationResponse updateMyLocation(LocationUpdateRequest req) {
@@ -40,79 +49,120 @@ public class LocationService {
 
         DeliveryLocation loc = locationRepository.findByDeliveryManId(me.getId())
                 .orElseGet(() -> {
-                    var l = new DeliveryLocation();
-                    l.setDeliveryMan(me);
-                    return l;
+                    var next = new DeliveryLocation();
+                    next.setDeliveryMan(me);
+                    return next;
                 });
+
+        LaundryOrder order = null;
+        if (req.orderId() != null) {
+            order = orderRepository.findById(req.orderId())
+                    .orElseThrow(() -> new NotFoundException("Order not found"));
+            boolean assignedToOrder = assignmentRepository
+                    .existsByOrderIdAndAssignedToIdAndAssignmentTypeInAndStatusIn(
+                            order.getId(),
+                            me.getId(),
+                            TRACKABLE_ASSIGNMENT_TYPES,
+                            ACTIVE_ASSIGNMENT_STATUSES
+                    );
+            if (!assignedToOrder) {
+                throw new BadRequestException(
+                        "Location can only be shared for an accepted or active pickup/delivery assignment");
+            }
+        }
 
         loc.setLatitude(req.latitude());
         loc.setLongitude(req.longitude());
         loc.setAccuracy(req.accuracy());
         loc.setUpdatedAt(Instant.now());
-        loc.setOrder(req.orderId() == null ? null :
-                orderRepository.findById(req.orderId())
-                        .orElseThrow(() -> new NotFoundException("Order not found")));
+        loc.setOrder(order);
 
         loc = locationRepository.save(loc);
         LocationResponse response = LocationResponse.from(loc);
 
-        // Push to SSE listeners for this order
-        if (req.orderId() != null) pushToSubscribers(req.orderId(), response);
+        if (order != null) {
+            pushToSubscribers(order.getId(), response);
+        }
 
         return response;
     }
 
-    // ── Admin: all agents on map ────────────────────────────────────────────────
-
     @Transactional(readOnly = true)
     public List<LocationResponse> allLocations() {
         return locationRepository.findAll().stream()
-                .map(LocationResponse::from).toList();
+                .map(LocationResponse::from)
+                .toList();
     }
-
-    // ── Admin/Customer: one order's agent location ─────────────────────────────
 
     @Transactional(readOnly = true)
     public LocationResponse locationForOrder(UUID orderId) {
+        scopedOrder(orderId);
         return locationRepository.findByOrderId(orderId)
                 .map(LocationResponse::from)
                 .orElseThrow(() -> new NotFoundException(
                         "No live location available for this order yet"));
     }
 
-    // ── SSE: subscribe to real-time updates ────────────────────────────────────
-
+    @Transactional(readOnly = true)
     public SseEmitter subscribeToOrder(UUID orderId) {
-        var emitter = new SseEmitter(5 * 60 * 1000L); // 5 min timeout
+        scopedOrder(orderId);
 
-        subscribers.computeIfAbsent(orderId,
-                k -> new CopyOnWriteArrayList<>()).add(emitter);
+        var emitter = new SseEmitter(30 * 60 * 1000L);
+        subscribers.computeIfAbsent(orderId, key -> new CopyOnWriteArrayList<>()).add(emitter);
 
         Runnable remove = () -> {
             var list = subscribers.get(orderId);
-            if (list != null) list.remove(emitter);
+            if (list != null) {
+                list.remove(emitter);
+            }
         };
         emitter.onCompletion(remove);
         emitter.onTimeout(remove);
-        emitter.onError(e -> remove.run());
+        emitter.onError(error -> remove.run());
 
-        // Send current location immediately on connect
         locationRepository.findByOrderId(orderId).ifPresent(loc -> {
             try {
                 emitter.send(SseEmitter.event()
-                        .name("location").data(LocationResponse.from(loc)));
-            } catch (Exception ignored) {}
+                        .name("location")
+                        .data(LocationResponse.from(loc)));
+            } catch (Exception ignored) {
+                remove.run();
+            }
         });
+
         return emitter;
+    }
+
+    private LaundryOrder scopedOrder(UUID orderId) {
+        User user = principalService.currentUser();
+        LaundryOrder order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new NotFoundException("Order not found"));
+
+        if (user.getRole() == UserRole.customer
+                && !order.getCustomer().getId().equals(user.getId())) {
+            throw new NotFoundException("Order not found");
+        }
+
+        if (user.getRole() != UserRole.admin && user.getRole() != UserRole.customer) {
+            throw new BadRequestException("Live location is only available to admins and the order customer");
+        }
+
+        return order;
     }
 
     private void pushToSubscribers(UUID orderId, LocationResponse payload) {
         var list = subscribers.get(orderId);
-        if (list == null || list.isEmpty()) return;
+        if (list == null || list.isEmpty()) {
+            return;
+        }
+
         var dead = new ArrayList<SseEmitter>();
-        for (var e : list) {
-            try { e.send(SseEmitter.event().name("location").data(payload)); }
-            catch (Exception ex) { dead.add(e); }
+        for (var emitter : list) {
+            try {
+                emitter.send(SseEmitter.event().name("location").data(payload));
+            } catch (Exception ex) {
+                dead.add(emitter);
+            }
         }
         list.removeAll(dead);
     }

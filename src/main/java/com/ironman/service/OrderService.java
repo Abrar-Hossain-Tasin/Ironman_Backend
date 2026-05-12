@@ -111,6 +111,9 @@ public class OrderService {
     order.setPreferredDeliveryDate(request.preferredDeliveryDate());
     order.setPreferredDeliveryTimeSlot(request.preferredDeliveryTimeSlot());
     order.setSpecialInstructions(request.specialInstructions());
+    if (request.paymentMethod() != null) {
+      order.setPaymentMethod(request.paymentMethod());
+    }
     order.setOrderNumber(nextOrderNumber());
     order.setStatus(OrderStatus.pending);
     order.setPaymentStatus(PaymentStatus.pending);

@@ -65,13 +65,13 @@ spring:
 
   # ── Mail ────────────────────────────────────────────────────────────────────
   mail:
-    host: smtp.gmail.com
-    port: 587
-    username: ironman.bd777@gmail.com
-    password: wbhr ooul vocv fxex
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:25}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
     properties:
-      mail.smtp.auth: true
-      mail.smtp.starttls.enable: true
+      mail.smtp.auth: ${MAIL_SMTP_AUTH:false}
+      mail.smtp.starttls.enable: ${MAIL_SMTP_STARTTLS_ENABLE:false}
 
   # ── Async thread pool (for EmailService) ────────────────────────────────────
   task:
@@ -90,8 +90,8 @@ app:
     allowed-origins: ${ALLOWED_ORIGINS:http://localhost:3000}
   timezone: Asia/Dhaka
   mail:
-    enabled: true   # set to true in production
-    from: noreply@ironman-laundry.com
+    enabled: ${MAIL_ENABLED:false}
+    from: ${MAIL_FROM:noreply@ironman-laundry.com}
 
 springdoc:
   api-docs:
