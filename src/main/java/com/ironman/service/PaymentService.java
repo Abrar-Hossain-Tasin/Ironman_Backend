@@ -6,6 +6,8 @@ import com.ironman.dto.payment.BkashMerchantPaymentRequest;
 import com.ironman.dto.payment.CodPaymentStatusResponse;
 import com.ironman.dto.payment.PaymentRecordRequest;
 import com.ironman.dto.payment.PaymentResponse;
+import com.ironman.dto.payment.RefundRequest;
+import com.ironman.dto.payment.RefundResponse;
 import com.ironman.model.AssignmentStatus;
 import com.ironman.model.AssignmentType;
 import com.ironman.model.CodConfirmationStatus;
@@ -15,11 +17,15 @@ import com.ironman.model.Payment;
 import com.ironman.model.PaymentMethod;
 import com.ironman.model.PaymentStatus;
 import com.ironman.model.PaymentType;
+import com.ironman.model.Refund;
+import com.ironman.model.RefundStatus;
 import com.ironman.model.User;
 import com.ironman.model.UserRole;
 import com.ironman.repository.LaundryOrderRepository;
 import com.ironman.repository.OrderAssignmentRepository;
 import com.ironman.repository.PaymentRepository;
+import com.ironman.repository.RefundRepository;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -35,6 +41,7 @@ public class PaymentService {
   private final LaundryOrderRepository orderRepository;
   private final OrderAssignmentRepository assignmentRepository;
   private final NotificationService notificationService;
+  private final RefundRepository refundRepository;
 
   @Transactional
   public PaymentResponse record(PaymentRecordRequest request) {
@@ -264,6 +271,107 @@ public class PaymentService {
     return assignmentRepository
         .findFirstByOrderIdAndAssignmentTypeOrderByAssignedAtDesc(
             order.getId(), AssignmentType.delivery);
+  }
+
+  // ── Refunds (admin) ──────────────────────────────────────────────────────────
+
+  @Transactional
+  public RefundResponse requestRefund(UUID orderId, RefundRequest request) {
+    User admin = principalService.currentUser();
+    LaundryOrder order = orderRepository.findById(orderId)
+        .orElseThrow(() -> new NotFoundException("Order not found"));
+
+    BigDecimal alreadyRefunded = refundRepository.totalProcessedForOrder(orderId);
+    BigDecimal remaining = order.getPaidAmount().subtract(alreadyRefunded);
+    if (request.amount().compareTo(remaining) > 0) {
+      throw new BadRequestException(
+          "Refund cannot exceed refundable amount: " + remaining);
+    }
+
+    Refund refund = new Refund();
+    refund.setOrder(order);
+    refund.setAmount(request.amount());
+    refund.setReason(request.reason());
+    refund.setOriginalMethod(order.getPaymentMethod());
+    refund.setTransactionReference(request.transactionReference());
+    refund.setRequestedBy(admin);
+    refund = refundRepository.save(refund);
+
+    notificationService.notifyUser(order.getCustomer(),
+        "Refund initiated — " + order.getOrderNumber(),
+        "A refund of BDT " + request.amount() + " is being processed.",
+        "refund_requested", order.getId());
+
+    return RefundResponse.from(refund);
+  }
+
+  @Transactional
+  public RefundResponse processRefund(UUID refundId) {
+    User admin = principalService.currentUser();
+    Refund refund = refundRepository.findById(refundId)
+        .orElseThrow(() -> new NotFoundException("Refund not found"));
+    if (refund.getStatus() != RefundStatus.pending) {
+      throw new BadRequestException("Refund is not pending");
+    }
+
+    LaundryOrder order = refund.getOrder();
+    BigDecimal newPaid = order.getPaidAmount().subtract(refund.getAmount());
+    order.setPaidAmount(newPaid.max(BigDecimal.ZERO));
+    if (newPaid.compareTo(BigDecimal.ZERO) <= 0) {
+      order.setPaymentStatus(PaymentStatus.pending);
+    } else if (newPaid.compareTo(order.getTotalAmount()) < 0) {
+      order.setPaymentStatus(PaymentStatus.partial);
+    }
+    orderRepository.save(order);
+
+    refund.setStatus(RefundStatus.processed);
+    refund.setProcessedBy(admin);
+    refund.setProcessedAt(Instant.now());
+    refund = refundRepository.save(refund);
+
+    notificationService.notifyUser(order.getCustomer(),
+        "Refund processed — " + order.getOrderNumber(),
+        "BDT " + refund.getAmount() + " has been refunded.",
+        "refund_processed", order.getId());
+
+    return RefundResponse.from(refund);
+  }
+
+  @Transactional
+  public RefundResponse failRefund(UUID refundId, String reason) {
+    User admin = principalService.currentUser();
+    Refund refund = refundRepository.findById(refundId)
+        .orElseThrow(() -> new NotFoundException("Refund not found"));
+    if (refund.getStatus() != RefundStatus.pending) {
+      throw new BadRequestException("Refund is not pending");
+    }
+    refund.setStatus(RefundStatus.failed);
+    refund.setProcessedBy(admin);
+    refund.setProcessedAt(Instant.now());
+    if (reason != null && !reason.isBlank()) {
+      refund.setReason((refund.getReason() == null ? "" : refund.getReason() + " | ")
+          + "Failed: " + reason);
+    }
+    return RefundResponse.from(refundRepository.save(refund));
+  }
+
+  @Transactional(readOnly = true)
+  public List<RefundResponse> refundsForOrder(UUID orderId) {
+    User user = principalService.currentUser();
+    LaundryOrder order = orderRepository.findById(orderId)
+        .orElseThrow(() -> new NotFoundException("Order not found"));
+    if (user.getRole() == UserRole.customer
+        && !order.getCustomer().getId().equals(user.getId())) {
+      throw new NotFoundException("Order not found");
+    }
+    return refundRepository.findByOrderIdOrderByRequestedAtDesc(orderId).stream()
+        .map(RefundResponse::from).toList();
+  }
+
+  @Transactional(readOnly = true)
+  public List<RefundResponse> refundLedger() {
+    return refundRepository.findAllByOrderByRequestedAtDesc().stream()
+        .map(RefundResponse::from).toList();
   }
 
   private String blankToNull(String value) {

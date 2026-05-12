@@ -8,8 +8,10 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
-public interface LaundryOrderRepository extends JpaRepository<LaundryOrder, UUID> {
+public interface LaundryOrderRepository
+    extends JpaRepository<LaundryOrder, UUID>, JpaSpecificationExecutor<LaundryOrder> {
   List<LaundryOrder> findByCustomerIdOrderByCreatedAtDesc(UUID customerId);
 
   List<LaundryOrder> findByStatusOrderByCreatedAtDesc(OrderStatus status);

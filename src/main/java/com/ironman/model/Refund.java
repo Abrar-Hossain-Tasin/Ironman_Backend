@@ -24,8 +24,8 @@ import org.hibernate.dialect.PostgreSQLEnumJdbcType;
 @Setter
 @NoArgsConstructor
 @Entity
-@Table(name = "order_tracking")
-public class OrderTracking {
+@Table(name = "refunds")
+public class Refund {
   @Id
   @GeneratedValue(strategy = GenerationType.UUID)
   private UUID id;
@@ -34,29 +34,36 @@ public class OrderTracking {
   @JoinColumn(name = "order_id")
   private LaundryOrder order;
 
-  @Column(nullable = false, length = 64)
-  private String status;
+  @Column(nullable = false)
+  private BigDecimal amount;
 
-  @Column(name = "status_label", nullable = false, length = 128)
-  private String statusLabel;
-
-  private String description;
-
-  @ManyToOne(fetch = FetchType.LAZY)
-  @JoinColumn(name = "updated_by")
-  private User updatedBy;
+  @Column(columnDefinition = "text")
+  private String reason;
 
   @Enumerated(EnumType.STRING)
   @JdbcType(PostgreSQLEnumJdbcType.class)
-  @Column(name = "actor_role", columnDefinition = "user_role")
-  private UserRole actorRole;
+  @Column(nullable = false, columnDefinition = "refund_status")
+  private RefundStatus status = RefundStatus.pending;
 
-  @Column(name = "location_lat")
-  private BigDecimal locationLat;
+  @Enumerated(EnumType.STRING)
+  @JdbcType(PostgreSQLEnumJdbcType.class)
+  @Column(name = "original_method", columnDefinition = "payment_method")
+  private PaymentMethod originalMethod;
 
-  @Column(name = "location_lng")
-  private BigDecimal locationLng;
+  @Column(name = "transaction_reference")
+  private String transactionReference;
 
-  @Column(nullable = false)
-  private Instant timestamp = Instant.now();
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "requested_by")
+  private User requestedBy;
+
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "processed_by")
+  private User processedBy;
+
+  @Column(name = "requested_at", nullable = false)
+  private Instant requestedAt = Instant.now();
+
+  @Column(name = "processed_at")
+  private Instant processedAt;
 }

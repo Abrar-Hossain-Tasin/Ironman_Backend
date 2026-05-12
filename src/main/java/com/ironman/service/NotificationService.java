@@ -86,12 +86,14 @@ public class NotificationService {
   private final NotificationRepository notificationRepository;
   private final UserRepository userRepository;
   private final PrincipalService principalService;
-  private final EmailService emailService;   // ← NEW dependency
+  private final EmailService emailService;
+  private final SmsService smsService;
+  private final PushService pushService;
 
   @Transactional
   public void notifyUser(User user, String title, String body,
                          String type, UUID referenceId) {
-    // 1. Save in-app notification (existing behaviour)
+    // 1. Save in-app notification (powers Supabase Realtime fan-out + history)
     var notification = new Notification();
     notification.setUser(user);
     notification.setTitle(title);
@@ -100,8 +102,12 @@ public class NotificationService {
     notification.setReferenceId(referenceId);
     notificationRepository.save(notification);
 
-    // 2. Send email async (new)
+    // 2. Out-of-band channels — no-op stubs unless a provider is configured.
     emailService.send(user.getEmail(), title, body);
+    if (user.getPhone() != null && !user.getPhone().isBlank()) {
+      smsService.send(user.getPhone(), title + ": " + body);
+    }
+    pushService.send(user, title, body, type, referenceId);
   }
 
   @Transactional

@@ -1,10 +1,13 @@
 package com.ironman.service;
 
+import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -131,6 +134,32 @@ public class EmailService {
 
         — Ironman Laundry
         """.formatted(name, task, orderNo, noteLine));
+    }
+
+    @Async
+    public void sendWithAttachment(String to, String subject, String body,
+                                   String filename, byte[] attachment,
+                                   String contentType) {
+        if (!mailEnabled) {
+            log.info("[EMAIL SKIPPED] To: {} | Subject: {} | Attachment: {} ({} bytes)",
+                    to, subject, filename, attachment == null ? 0 : attachment.length);
+            return;
+        }
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setFrom(fromAddress);
+            helper.setTo(to);
+            helper.setSubject(subject);
+            helper.setText(body);
+            if (attachment != null && filename != null) {
+                helper.addAttachment(filename, new ByteArrayResource(attachment), contentType);
+            }
+            mailSender.send(message);
+            log.info("Email with attachment sent → {} — {} ({})", to, subject, filename);
+        } catch (Exception ex) {
+            log.error("Email with attachment failed → {}: {}", to, ex.getMessage());
+        }
     }
 
     public void sendAdminNewOrder(String to, String customer, String orderNo, String amount) {

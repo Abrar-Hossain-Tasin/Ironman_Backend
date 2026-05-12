@@ -24,8 +24,8 @@ import org.hibernate.dialect.PostgreSQLEnumJdbcType;
 @Setter
 @NoArgsConstructor
 @Entity
-@Table(name = "order_tracking")
-public class OrderTracking {
+@Table(name = "order_issues")
+public class OrderIssue {
   @Id
   @GeneratedValue(strategy = GenerationType.UUID)
   private UUID id;
@@ -34,29 +34,39 @@ public class OrderTracking {
   @JoinColumn(name = "order_id")
   private LaundryOrder order;
 
-  @Column(nullable = false, length = 64)
-  private String status;
-
-  @Column(name = "status_label", nullable = false, length = 128)
-  private String statusLabel;
-
-  private String description;
-
-  @ManyToOne(fetch = FetchType.LAZY)
-  @JoinColumn(name = "updated_by")
-  private User updatedBy;
+  @ManyToOne(fetch = FetchType.LAZY, optional = false)
+  @JoinColumn(name = "reported_by")
+  private User reportedBy;
 
   @Enumerated(EnumType.STRING)
   @JdbcType(PostgreSQLEnumJdbcType.class)
-  @Column(name = "actor_role", columnDefinition = "user_role")
-  private UserRole actorRole;
+  @Column(name = "issue_type", nullable = false, columnDefinition = "issue_type")
+  private IssueType type;
 
-  @Column(name = "location_lat")
-  private BigDecimal locationLat;
+  @Column(nullable = false, columnDefinition = "text")
+  private String description;
 
-  @Column(name = "location_lng")
-  private BigDecimal locationLng;
+  @Column(name = "photo_urls", columnDefinition = "text")
+  private String photoUrls;
 
-  @Column(nullable = false)
-  private Instant timestamp = Instant.now();
+  @Enumerated(EnumType.STRING)
+  @JdbcType(PostgreSQLEnumJdbcType.class)
+  @Column(nullable = false, columnDefinition = "issue_status")
+  private IssueStatus status = IssueStatus.open;
+
+  @Column(name = "resolution_notes", columnDefinition = "text")
+  private String resolutionNotes;
+
+  @Column(name = "refund_amount")
+  private BigDecimal refundAmount;
+
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "resolved_by")
+  private User resolvedBy;
+
+  @Column(name = "created_at", nullable = false)
+  private Instant createdAt = Instant.now();
+
+  @Column(name = "resolved_at")
+  private Instant resolvedAt;
 }

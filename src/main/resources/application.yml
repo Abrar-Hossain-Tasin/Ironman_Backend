@@ -92,6 +92,19 @@ app:
   mail:
     enabled: ${MAIL_ENABLED:false}
     from: ${MAIL_FROM:noreply@ironman-laundry.com}
+  sms:
+    enabled: ${SMS_ENABLED:false}
+  push:
+    enabled: ${PUSH_ENABLED:false}
+  branding:
+    name: ${BRAND_NAME:Ironman Laundry}
+    tagline: ${BRAND_TAGLINE:Premium laundry, delivered.}
+    theme-color: ${THEME_COLOR:#F5A623}
+    logo-path: ${BRAND_LOGO_PATH:../Ironman_Frontend/public/Ironman-logo.png}
+    company-address: ${BRAND_ADDRESS:Dhaka, Bangladesh}
+    contact-phone: ${BRAND_PHONE:+880 1700 000000}
+    contact-email: ${BRAND_EMAIL:support@ironman-laundry.com}
+    website: ${BRAND_WEBSITE:https://ironman-laundry.com}
 
 springdoc:
   api-docs:

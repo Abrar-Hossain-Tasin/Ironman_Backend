@@ -17,5 +17,6 @@ public record PlaceOrderRequest(
     @NotNull String preferredDeliveryTimeSlot,
     String specialInstructions,
     PaymentMethod paymentMethod,
+    String couponCode,
     @Valid @NotEmpty List<OrderItemRequest> items
 ) {}

@@ -8,8 +8,10 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.UUID;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -19,35 +21,27 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @Entity
-@Table(name = "order_items")
-public class OrderItem {
+@Table(name = "coupon_redemptions")
+public class CouponRedemption {
   @Id
   @GeneratedValue(strategy = GenerationType.UUID)
   private UUID id;
 
   @ManyToOne(fetch = FetchType.LAZY, optional = false)
-  @JoinColumn(name = "order_id")
+  @JoinColumn(name = "coupon_id")
+  private Coupon coupon;
+
+  @OneToOne(fetch = FetchType.LAZY, optional = false)
+  @JoinColumn(name = "order_id", unique = true)
   private LaundryOrder order;
 
   @ManyToOne(fetch = FetchType.LAZY, optional = false)
-  @JoinColumn(name = "clothing_type_id")
-  private ClothingType clothingType;
+  @JoinColumn(name = "customer_id")
+  private User customer;
 
-  @ManyToOne(fetch = FetchType.LAZY, optional = false)
-  @JoinColumn(name = "service_category_id")
-  private ServiceCategory serviceCategory;
+  @Column(name = "discount_amount", nullable = false)
+  private BigDecimal discountAmount;
 
-  @Column(nullable = false)
-  private int quantity;
-
-  @Column(name = "actual_quantity")
-  private Integer actualQuantity;
-
-  @Column(name = "unit_price", nullable = false)
-  private BigDecimal unitPrice;
-
-  @Column(nullable = false)
-  private BigDecimal subtotal;
-
-  private String notes;
+  @Column(name = "redeemed_at", nullable = false)
+  private Instant redeemedAt = Instant.now();
 }

@@ -94,6 +94,12 @@ public class LaundryOrder {
   @Column(name = "paid_amount", nullable = false)
   private BigDecimal paidAmount = BigDecimal.ZERO;
 
+  @Column(name = "discount_amount", nullable = false)
+  private BigDecimal discountAmount = BigDecimal.ZERO;
+
+  @Column(name = "coupon_code", length = 64)
+  private String couponCode;
+
   @Column(name = "created_at", nullable = false)
   private Instant createdAt = Instant.now();
 

@@ -4,14 +4,22 @@ import com.ironman.config.BadRequestException;
 import com.ironman.config.NotFoundException;
 import com.ironman.dto.order.AssignmentActionRequest;
 import com.ironman.dto.order.AssignmentResponse;
+import com.ironman.dto.order.PickupReconcileRequest;
 import com.ironman.model.AssignmentStatus;
 import com.ironman.model.AssignmentType;
+import com.ironman.model.LaundryOrder;
 import com.ironman.model.OrderAssignment;
+import com.ironman.model.OrderItem;
 import com.ironman.model.OrderStatus;
 import com.ironman.model.User;
+import com.ironman.repository.LaundryOrderRepository;
 import com.ironman.repository.OrderAssignmentRepository;
+import com.ironman.repository.OrderItemRepository;
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -23,6 +31,9 @@ public class AssignmentService {
   private final PrincipalService principalService;
   private final OrderAssignmentRepository assignmentRepository;
   private final OrderService orderService;
+  private final OrderItemRepository orderItemRepository;
+  private final LaundryOrderRepository orderRepository;
+  private final NotificationService notificationService;
 
   @Transactional(readOnly = true)
   public List<AssignmentResponse> mine() {
@@ -74,6 +85,64 @@ public class AssignmentService {
     assignment = assignmentRepository.save(assignment);
     OrderStatus status = completionStatus(assignment.getAssignmentType());
     orderService.updateStatus(assignment.getOrder(), status, actor.getFullName() + " completed " + assignment.getAssignmentType().name(), actor);
+    return AssignmentResponse.from(assignment);
+  }
+
+  @Transactional
+  public AssignmentResponse reconcilePickup(UUID assignmentId, PickupReconcileRequest request) {
+    User actor = principalService.currentUser();
+    OrderAssignment assignment = myAssignment(assignmentId);
+    if (assignment.getAssignmentType() != AssignmentType.pickup) {
+      throw new BadRequestException("Reconciliation is only for pickup assignments");
+    }
+
+    LaundryOrder order = assignment.getOrder();
+    List<OrderItem> items = orderItemRepository.findByOrderId(order.getId());
+    Map<UUID, OrderItem> byId = new HashMap<>();
+    for (OrderItem item : items) {
+      byId.put(item.getId(), item);
+    }
+
+    boolean discrepancy = false;
+    BigDecimal newTotal = BigDecimal.ZERO;
+    for (PickupReconcileRequest.ItemCount count : request.items()) {
+      OrderItem item = byId.get(count.itemId());
+      if (item == null) {
+        throw new BadRequestException("Item " + count.itemId() + " not on this order");
+      }
+      item.setActualQuantity(count.actualQuantity());
+      BigDecimal subtotal = item.getUnitPrice()
+          .multiply(BigDecimal.valueOf(count.actualQuantity()));
+      item.setSubtotal(subtotal);
+      orderItemRepository.save(item);
+      if (count.actualQuantity() != item.getQuantity()) {
+        discrepancy = true;
+      }
+      newTotal = newTotal.add(subtotal);
+    }
+
+    BigDecimal discount = order.getDiscountAmount() == null
+        ? BigDecimal.ZERO : order.getDiscountAmount();
+    order.setTotalAmount(newTotal.subtract(discount).max(BigDecimal.ZERO));
+    order.setUpdatedAt(Instant.now());
+    orderRepository.save(order);
+
+    if (request.notes() != null && !request.notes().isBlank()) {
+      assignment.setNotes(request.notes());
+      assignmentRepository.save(assignment);
+    }
+
+    if (discrepancy) {
+      notificationService.notifyUser(order.getCustomer(),
+          "Item count adjusted — " + order.getOrderNumber(),
+          "Actual item counts have been recorded at pickup. Your total has been updated.",
+          "pickup_reconciled", order.getId());
+      notificationService.notifyAdmins(
+          "Pickup count adjusted — " + order.getOrderNumber(),
+          actor.getFullName() + " recorded a count mismatch during pickup.",
+          "pickup_reconciled_admin", order.getId());
+    }
+
     return AssignmentResponse.from(assignment);
   }
 

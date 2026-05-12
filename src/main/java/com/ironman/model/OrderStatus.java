@@ -16,5 +16,8 @@ public enum OrderStatus {
   delivery_assigned,
   out_for_delivery,
   delivered,
+  delivery_failed,
+  returned,
+  disputed,
   cancelled
 }

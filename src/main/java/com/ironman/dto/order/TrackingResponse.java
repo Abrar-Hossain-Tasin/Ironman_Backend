@@ -1,6 +1,7 @@
 package com.ironman.dto.order;
 
 import com.ironman.model.OrderTracking;
+import com.ironman.model.UserRole;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
@@ -13,6 +14,7 @@ public record TrackingResponse(
     String description,
     UUID updatedBy,
     String updatedByName,
+    UserRole actorRole,
     BigDecimal locationLat,
     BigDecimal locationLng,
     Instant timestamp
@@ -27,6 +29,7 @@ public record TrackingResponse(
         tracking.getDescription(),
         user == null ? null : user.getId(),
         user == null ? "System" : user.getFullName(),
+        tracking.getActorRole(),
         tracking.getLocationLat(),
         tracking.getLocationLng(),
         tracking.getTimestamp()

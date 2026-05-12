@@ -3,8 +3,12 @@ package com.ironman.service;
 import com.ironman.config.BadRequestException;
 import com.ironman.config.NotFoundException;
 import com.ironman.dto.order.OrderItemResponse;
+import com.ironman.dto.order.OrderItemRequest;
 import com.ironman.dto.order.OrderResponse;
 import com.ironman.dto.order.PlaceOrderRequest;
+import com.ironman.dto.order.QuoteRequest;
+import com.ironman.dto.order.QuoteResponse;
+import com.ironman.dto.order.RescheduleRequest;
 import com.ironman.dto.order.TrackingResponse;
 import com.ironman.model.CodConfirmationStatus;
 import com.ironman.model.LaundryOrder;
@@ -72,8 +76,16 @@ public class OrderService {
           Map.entry(OrderStatus.delivery_assigned,
                   Set.of(OrderStatus.out_for_delivery, OrderStatus.cancelled)),
           Map.entry(OrderStatus.out_for_delivery,
-                  Set.of(OrderStatus.delivered, OrderStatus.cancelled)),
-          Map.entry(OrderStatus.delivered, Set.of()),
+                  Set.of(OrderStatus.delivered, OrderStatus.delivery_failed,
+                          OrderStatus.cancelled)),
+          Map.entry(OrderStatus.delivered,
+                  Set.of(OrderStatus.disputed, OrderStatus.returned)),
+          Map.entry(OrderStatus.delivery_failed,
+                  Set.of(OrderStatus.delivery_assigned, OrderStatus.returned,
+                          OrderStatus.cancelled)),
+          Map.entry(OrderStatus.disputed,
+                  Set.of(OrderStatus.delivered, OrderStatus.returned)),
+          Map.entry(OrderStatus.returned, Set.of()),
           Map.entry(OrderStatus.cancelled, Set.of())
   );
 
@@ -88,6 +100,7 @@ public class OrderService {
   private final CustomerProfileRepository customerProfileRepository;
   private final NotificationService notificationService;
   private final EmailService emailService;
+  private final CouponService couponService;
 
   @Transactional
   public OrderResponse placeOrder(PlaceOrderRequest request) {
@@ -146,8 +159,18 @@ public class OrderService {
       total = total.add(subtotal);
     }
 
-    order.setTotalAmount(total);
+    CouponService.AppliedCoupon applied = couponService.validate(
+        request.couponCode(), total, customer);
+    BigDecimal discount = applied == null ? BigDecimal.ZERO : applied.discountAmount();
+    BigDecimal finalTotal = total.subtract(discount).max(BigDecimal.ZERO);
+
+    order.setDiscountAmount(discount);
+    if (applied != null) {
+      order.setCouponCode(applied.coupon().getCode());
+    }
+    order.setTotalAmount(finalTotal);
     order = orderRepository.save(order);
+    couponService.recordRedemption(applied, order, customer);
     addTracking(order, OrderStatus.pending, "Order placed", customer);
 
     customerProfileRepository.findByUserId(customer.getId()).ifPresent(profile -> {
@@ -185,6 +208,38 @@ public class OrderService {
   }
 
   @Transactional(readOnly = true)
+  public QuoteResponse quote(QuoteRequest request) {
+    User customer = principalService.currentUser();
+    BigDecimal subtotal = BigDecimal.ZERO;
+    var lines = new java.util.ArrayList<QuoteResponse.QuoteLine>();
+    for (OrderItemRequest requestItem : request.items()) {
+      var clothingType = clothingTypeRepository.findById(requestItem.clothingTypeId())
+              .orElseThrow(() -> new NotFoundException("Clothing type not found"));
+      var category = serviceCategoryRepository.findById(requestItem.serviceCategoryId())
+              .orElseThrow(() -> new NotFoundException("Service category not found"));
+      var pricing = servicePricingRepository
+              .findByServiceCategoryIdAndClothingTypeIdAndCurrentTrue(
+                      category.getId(), clothingType.getId())
+              .orElseThrow(() -> new BadRequestException(
+                      "Pricing is unavailable for " + category.getName()
+                              + " / " + clothingType.getName()));
+      BigDecimal lineSub = pricing.getPrice()
+          .multiply(BigDecimal.valueOf(requestItem.quantity()));
+      lines.add(new QuoteResponse.QuoteLine(
+          clothingType.getId(), clothingType.getName(),
+          category.getId(), category.getName(),
+          requestItem.quantity(), pricing.getPrice(), lineSub));
+      subtotal = subtotal.add(lineSub);
+    }
+    CouponService.AppliedCoupon applied = couponService.validate(
+        request.couponCode(), subtotal, customer);
+    BigDecimal discount = applied == null ? BigDecimal.ZERO : applied.discountAmount();
+    String code = applied == null ? null : applied.coupon().getCode();
+    return new QuoteResponse(lines, subtotal, discount, code,
+        subtotal.subtract(discount).max(BigDecimal.ZERO));
+  }
+
+  @Transactional(readOnly = true)
   public List<OrderResponse> listMineOrAll() {
     User user = principalService.currentUser();
     List<LaundryOrder> orders = user.getRole() == UserRole.admin
@@ -199,6 +254,46 @@ public class OrderService {
             ? orderRepository.findAllByOrderByCreatedAtDesc()
             : orderRepository.findByStatusOrderByCreatedAtDesc(status);
     return orders.stream().map(this::toResponse).toList();
+  }
+
+  @Transactional(readOnly = true)
+  public com.ironman.dto.order.OrderSearchResponse search(
+      OrderStatus status, java.time.LocalDate from, java.time.LocalDate to,
+      java.math.BigDecimal minAmount, java.math.BigDecimal maxAmount,
+      int page, int size
+  ) {
+    User user = principalService.currentUser();
+    org.springframework.data.jpa.domain.Specification<LaundryOrder> spec = (root, q, cb) -> {
+      var preds = new java.util.ArrayList<jakarta.persistence.criteria.Predicate>();
+      if (user.getRole() == UserRole.customer) {
+        preds.add(cb.equal(root.get("customer").get("id"), user.getId()));
+      }
+      if (status != null) {
+        preds.add(cb.equal(root.get("status"), status));
+      }
+      if (from != null) {
+        preds.add(cb.greaterThanOrEqualTo(root.get("createdAt"),
+            from.atStartOfDay(DHAKA).toInstant()));
+      }
+      if (to != null) {
+        preds.add(cb.lessThan(root.get("createdAt"),
+            to.plusDays(1).atStartOfDay(DHAKA).toInstant()));
+      }
+      if (minAmount != null) {
+        preds.add(cb.greaterThanOrEqualTo(root.get("totalAmount"), minAmount));
+      }
+      if (maxAmount != null) {
+        preds.add(cb.lessThanOrEqualTo(root.get("totalAmount"), maxAmount));
+      }
+      return cb.and(preds.toArray(new jakarta.persistence.criteria.Predicate[0]));
+    };
+    var pageable = org.springframework.data.domain.PageRequest.of(
+        Math.max(0, page), Math.min(100, Math.max(1, size)),
+        org.springframework.data.domain.Sort.by("createdAt").descending());
+    var p = orderRepository.findAll(spec, pageable);
+    return new com.ironman.dto.order.OrderSearchResponse(
+        p.getContent().stream().map(this::toResponse).toList(),
+        p.getNumber(), p.getSize(), p.getTotalElements(), p.getTotalPages());
   }
 
   @Transactional(readOnly = true)
@@ -235,6 +330,67 @@ public class OrderService {
     return trackingRepository.findByOrderIdOrderByTimestampAsc(order.getId()).stream()
             .map(TrackingResponse::from)
             .toList();
+  }
+
+  @Transactional
+  public OrderResponse reschedule(UUID id, RescheduleRequest request) {
+    User actor = principalService.currentUser();
+    LaundryOrder order = scopedOrder(id);
+
+    boolean changingPickup = request.preferredPickupDate() != null
+        || request.preferredPickupTimeSlot() != null;
+    boolean changingDelivery = request.preferredDeliveryDate() != null
+        || request.preferredDeliveryTimeSlot() != null;
+    if (!changingPickup && !changingDelivery) {
+      throw new BadRequestException("Provide a pickup or delivery slot to reschedule");
+    }
+
+    if (changingPickup) {
+      if (!Set.of(OrderStatus.pending, OrderStatus.confirmed, OrderStatus.pickup_assigned)
+          .contains(order.getStatus())) {
+        throw new BadRequestException("Pickup cannot be rescheduled after collection");
+      }
+      if (request.preferredPickupDate() != null) {
+        if (request.preferredPickupDate().isBefore(LocalDate.now(DHAKA))) {
+          throw new BadRequestException("Pickup date cannot be in the past");
+        }
+        order.setPreferredPickupDate(request.preferredPickupDate());
+      }
+      if (request.preferredPickupTimeSlot() != null) {
+        order.setPreferredPickupTimeSlot(request.preferredPickupTimeSlot());
+      }
+    }
+
+    if (changingDelivery) {
+      if (Set.of(OrderStatus.delivered, OrderStatus.cancelled, OrderStatus.returned)
+          .contains(order.getStatus())) {
+        throw new BadRequestException("Delivery cannot be rescheduled for closed orders");
+      }
+      if (request.preferredDeliveryDate() != null) {
+        if (request.preferredDeliveryDate().isBefore(LocalDate.now(DHAKA))) {
+          throw new BadRequestException("Delivery date cannot be in the past");
+        }
+        order.setPreferredDeliveryDate(request.preferredDeliveryDate());
+      }
+      if (request.preferredDeliveryTimeSlot() != null) {
+        order.setPreferredDeliveryTimeSlot(request.preferredDeliveryTimeSlot());
+      }
+    }
+
+    order.setUpdatedAt(Instant.now());
+    order = orderRepository.save(order);
+
+    String note = (request.reason() == null || request.reason().isBlank())
+        ? "Schedule updated"
+        : "Schedule updated: " + request.reason();
+    addTracking(order, order.getStatus(), note, actor);
+
+    notificationService.notifyUser(order.getCustomer(),
+        "Schedule updated — " + order.getOrderNumber(),
+        "Your order schedule has been updated. " + note,
+        "order_rescheduled", order.getId());
+
+    return toResponse(order);
   }
 
   @Transactional
@@ -322,6 +478,9 @@ public class OrderService {
       case delivery_assigned -> "Delivery Assigned";
       case out_for_delivery -> "Out for Delivery";
       case delivered -> "Delivered";
+      case delivery_failed -> "Delivery Failed";
+      case returned -> "Returned";
+      case disputed -> "Disputed";
       case cancelled -> "Order Cancelled";
     };
   }
@@ -352,6 +511,9 @@ public class OrderService {
     tracking.setStatusLabel(statusLabel(status));
     tracking.setDescription(description);
     tracking.setUpdatedBy(actor);
+    if (actor != null) {
+      tracking.setActorRole(actor.getRole());
+    }
     trackingRepository.save(tracking);
   }
 
@@ -388,6 +550,9 @@ public class OrderService {
       case delivery_assigned -> "Delivery has been assigned";
       case out_for_delivery -> "Your order is on the way";
       case delivered -> "Delivered! Rate service";
+      case delivery_failed -> "Delivery attempt failed — we'll retry";
+      case returned -> "Order returned";
+      case disputed -> "Your complaint is under review";
       case cancelled -> "Order cancelled";
     };
   }

@@ -4,6 +4,7 @@ import com.ironman.dto.location.LocationResponse;
 import com.ironman.dto.location.LocationUpdateRequest;
 import com.ironman.dto.order.AssignmentActionRequest;
 import com.ironman.dto.order.AssignmentResponse;
+import com.ironman.dto.order.PickupReconcileRequest;
 import com.ironman.dto.payment.PaymentRecordRequest;
 import com.ironman.dto.payment.PaymentResponse;
 import com.ironman.service.AssignmentService;
@@ -45,6 +46,12 @@ public class DeliveryController {
   public AssignmentResponse complete(@PathVariable UUID id,
                                      @RequestBody(required = false) AssignmentActionRequest request) {
     return assignmentService.complete(id, request);
+  }
+
+  @PutMapping("/assignments/{id}/reconcile")
+  public AssignmentResponse reconcile(@PathVariable UUID id,
+                                      @Valid @RequestBody PickupReconcileRequest request) {
+    return assignmentService.reconcilePickup(id, request);
   }
 
   @PostMapping("/payments")

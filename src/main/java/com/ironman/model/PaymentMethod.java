@@ -2,5 +2,9 @@ package com.ironman.model;
 
 public enum PaymentMethod {
   cod,
-  online
+  online,
+  bkash,
+  nagad,
+  rocket,
+  card
 }

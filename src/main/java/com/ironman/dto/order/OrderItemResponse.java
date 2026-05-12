@@ -11,6 +11,7 @@ public record OrderItemResponse(
     UUID serviceCategoryId,
     String serviceCategoryName,
     int quantity,
+    Integer actualQuantity,
     BigDecimal unitPrice,
     BigDecimal subtotal,
     String notes
@@ -23,6 +24,7 @@ public record OrderItemResponse(
         item.getServiceCategory().getId(),
         item.getServiceCategory().getName(),
         item.getQuantity(),
+        item.getActualQuantity(),
         item.getUnitPrice(),
         item.getSubtotal(),
         item.getNotes()
