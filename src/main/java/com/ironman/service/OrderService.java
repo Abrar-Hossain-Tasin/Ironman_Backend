@@ -6,6 +6,7 @@ import com.ironman.dto.order.OrderItemResponse;
 import com.ironman.dto.order.OrderResponse;
 import com.ironman.dto.order.PlaceOrderRequest;
 import com.ironman.dto.order.TrackingResponse;
+import com.ironman.model.CodConfirmationStatus;
 import com.ironman.model.LaundryOrder;
 import com.ironman.model.OrderItem;
 import com.ironman.model.OrderStatus;
@@ -198,6 +199,12 @@ public class OrderService {
             ? orderRepository.findAllByOrderByCreatedAtDesc()
             : orderRepository.findByStatusOrderByCreatedAtDesc(status);
     return orders.stream().map(this::toResponse).toList();
+  }
+
+  @Transactional(readOnly = true)
+  public List<OrderResponse> listAdminByCodConfirmation(CodConfirmationStatus codStatus) {
+    return orderRepository.findByCodConfirmationStatusOrderByCreatedAtDesc(codStatus)
+            .stream().map(this::toResponse).toList();
   }
 
   @Transactional(readOnly = true)

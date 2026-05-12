@@ -5,6 +5,7 @@ import com.ironman.dto.order.AssignmentResponse;
 import com.ironman.dto.order.OrderResponse;
 import com.ironman.dto.order.StatusUpdateRequest;
 import com.ironman.dto.user.UserSummary;
+import com.ironman.model.CodConfirmationStatus;
 import com.ironman.model.OrderStatus;
 import com.ironman.model.UserRole;
 import com.ironman.service.AdminService;
@@ -32,7 +33,14 @@ public class AdminOrderController {
   private final AdminService adminService;
 
   @GetMapping
-  public List<OrderResponse> orders(@RequestParam(required = false) OrderStatus status) {
+  public List<OrderResponse> orders(
+      @RequestParam(required = false) OrderStatus status,
+      @RequestParam(name = "codConfirmationStatus", required = false)
+          CodConfirmationStatus codConfirmationStatus
+  ) {
+    if (codConfirmationStatus != null) {
+      return orderService.listAdminByCodConfirmation(codConfirmationStatus);
+    }
     return orderService.listAdmin(status);
   }
 

@@ -6,6 +6,7 @@ import com.ironman.dto.order.OrderResponse;
 import com.ironman.dto.order.PlaceOrderRequest;
 import com.ironman.dto.order.TrackingResponse;
 import com.ironman.dto.payment.BkashMerchantPaymentRequest;
+import com.ironman.dto.payment.CodPaymentStatusResponse;
 import com.ironman.dto.payment.PaymentResponse;
 import com.ironman.service.OrderService;
 import com.ironman.service.PaymentService;
@@ -14,6 +15,7 @@ import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -70,5 +72,20 @@ public class OrderController {
   public ApiMessage cancel(@PathVariable UUID id) {
     orderService.cancel(id);
     return new ApiMessage("Order cancelled");
+  }
+
+  @PatchMapping("/{id}/customer-payment-confirm")
+  public CodPaymentStatusResponse customerPaymentConfirm(@PathVariable UUID id) {
+    return paymentService.customerConfirmCodPayment(id);
+  }
+
+  @PatchMapping("/{id}/delivery-payment-confirm")
+  public CodPaymentStatusResponse deliveryPaymentConfirm(@PathVariable UUID id) {
+    return paymentService.deliveryConfirmCodPayment(id);
+  }
+
+  @GetMapping("/{id}/payment-status")
+  public CodPaymentStatusResponse paymentStatus(@PathVariable UUID id) {
+    return paymentService.codPaymentStatus(id);
   }
 }

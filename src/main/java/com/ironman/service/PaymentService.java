@@ -3,15 +3,22 @@ package com.ironman.service;
 import com.ironman.config.BadRequestException;
 import com.ironman.config.NotFoundException;
 import com.ironman.dto.payment.BkashMerchantPaymentRequest;
+import com.ironman.dto.payment.CodPaymentStatusResponse;
 import com.ironman.dto.payment.PaymentRecordRequest;
 import com.ironman.dto.payment.PaymentResponse;
+import com.ironman.model.AssignmentStatus;
+import com.ironman.model.AssignmentType;
+import com.ironman.model.CodConfirmationStatus;
 import com.ironman.model.LaundryOrder;
+import com.ironman.model.OrderAssignment;
 import com.ironman.model.Payment;
+import com.ironman.model.PaymentMethod;
 import com.ironman.model.PaymentStatus;
 import com.ironman.model.PaymentType;
 import com.ironman.model.User;
 import com.ironman.model.UserRole;
 import com.ironman.repository.LaundryOrderRepository;
+import com.ironman.repository.OrderAssignmentRepository;
 import com.ironman.repository.PaymentRepository;
 import java.time.Instant;
 import java.util.List;
@@ -26,6 +33,8 @@ public class PaymentService {
   private final PrincipalService principalService;
   private final PaymentRepository paymentRepository;
   private final LaundryOrderRepository orderRepository;
+  private final OrderAssignmentRepository assignmentRepository;
+  private final NotificationService notificationService;
 
   @Transactional
   public PaymentResponse record(PaymentRecordRequest request) {
@@ -142,6 +151,119 @@ public class PaymentService {
         paid.compareTo(order.getTotalAmount()) >= 0 ? PaymentStatus.paid : PaymentStatus.partial
     );
     orderRepository.save(order);
+  }
+
+  // ── Pay-on-Delivery dual confirmation ────────────────────────────────────────
+
+  @Transactional
+  public CodPaymentStatusResponse customerConfirmCodPayment(UUID orderId) {
+    User customer = principalService.currentUser();
+    LaundryOrder order = orderRepository.findById(orderId)
+        .orElseThrow(() -> new NotFoundException("Order not found"));
+
+    if (customer.getRole() != UserRole.customer
+        || !order.getCustomer().getId().equals(customer.getId())) {
+      throw new NotFoundException("Order not found");
+    }
+    if (order.getPaymentMethod() != PaymentMethod.cod) {
+      throw new BadRequestException("Order is not cash on delivery");
+    }
+    if (order.getCodConfirmationStatus() != CodConfirmationStatus.pending) {
+      throw new BadRequestException("Payment already confirmed");
+    }
+
+    order.setCodConfirmationStatus(CodConfirmationStatus.customer_confirmed);
+    order.setCustomerConfirmedAt(Instant.now());
+    order = orderRepository.save(order);
+
+    OrderAssignment deliveryAssignment = assignedDelivery(order)
+        .orElseThrow(() -> new BadRequestException(
+            "No delivery man is assigned to this order yet"));
+
+    notificationService.notifyUser(
+        deliveryAssignment.getAssignedTo(),
+        "Customer confirmed payment — " + order.getOrderNumber(),
+        "Customer has handed over the payment. Please confirm receipt.",
+        "cod_customer_confirmed",
+        order.getId()
+    );
+
+    return CodPaymentStatusResponse.from(order);
+  }
+
+  @Transactional
+  public CodPaymentStatusResponse deliveryConfirmCodPayment(UUID orderId) {
+    User deliveryMan = principalService.currentUser();
+    LaundryOrder order = orderRepository.findById(orderId)
+        .orElseThrow(() -> new NotFoundException("Order not found"));
+
+    if (order.getPaymentMethod() != PaymentMethod.cod) {
+      throw new BadRequestException("Order is not cash on delivery");
+    }
+
+    boolean assignedToThisDelivery = assignmentRepository
+        .existsByOrderIdAndAssignedToIdAndAssignmentTypeInAndStatusIn(
+            order.getId(),
+            deliveryMan.getId(),
+            List.of(AssignmentType.delivery),
+            List.of(AssignmentStatus.pending, AssignmentStatus.accepted,
+                AssignmentStatus.in_progress, AssignmentStatus.completed));
+    if (!assignedToThisDelivery) {
+      throw new NotFoundException("Order not found");
+    }
+
+    if (order.getCodConfirmationStatus() == CodConfirmationStatus.delivery_confirmed) {
+      throw new BadRequestException("Payment already confirmed by delivery");
+    }
+    if (order.getCodConfirmationStatus() == CodConfirmationStatus.pending) {
+      throw new BadRequestException(
+          "Customer has not yet confirmed handing over the payment");
+    }
+
+    order.setCodConfirmationStatus(CodConfirmationStatus.delivery_confirmed);
+    order.setDeliveryConfirmedAt(Instant.now());
+    order = orderRepository.save(order);
+
+    notificationService.notifyUser(
+        order.getCustomer(),
+        "Payment received — " + order.getOrderNumber(),
+        "Delivery man has confirmed receiving your payment. Thank you!",
+        "cod_delivery_confirmed",
+        order.getId()
+    );
+
+    return CodPaymentStatusResponse.from(order);
+  }
+
+  @Transactional(readOnly = true)
+  public CodPaymentStatusResponse codPaymentStatus(UUID orderId) {
+    User user = principalService.currentUser();
+    LaundryOrder order = orderRepository.findById(orderId)
+        .orElseThrow(() -> new NotFoundException("Order not found"));
+
+    boolean allowed = switch (user.getRole()) {
+      case admin -> true;
+      case customer -> order.getCustomer().getId().equals(user.getId());
+      case delivery_man -> assignmentRepository
+          .existsByOrderIdAndAssignedToIdAndAssignmentTypeInAndStatusIn(
+              order.getId(),
+              user.getId(),
+              List.of(AssignmentType.delivery),
+              List.of(AssignmentStatus.pending, AssignmentStatus.accepted,
+                  AssignmentStatus.in_progress, AssignmentStatus.completed));
+      default -> false;
+    };
+    if (!allowed) {
+      throw new NotFoundException("Order not found");
+    }
+
+    return CodPaymentStatusResponse.from(order);
+  }
+
+  private java.util.Optional<OrderAssignment> assignedDelivery(LaundryOrder order) {
+    return assignmentRepository
+        .findFirstByOrderIdAndAssignmentTypeOrderByAssignedAtDesc(
+            order.getId(), AssignmentType.delivery);
   }
 
   private String blankToNull(String value) {

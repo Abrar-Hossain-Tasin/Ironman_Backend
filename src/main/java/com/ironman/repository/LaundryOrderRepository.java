@@ -1,5 +1,6 @@
 package com.ironman.repository;
 
+import com.ironman.model.CodConfirmationStatus;
 import com.ironman.model.LaundryOrder;
 import com.ironman.model.OrderStatus;
 import java.time.Instant;
@@ -14,6 +15,9 @@ public interface LaundryOrderRepository extends JpaRepository<LaundryOrder, UUID
   List<LaundryOrder> findByStatusOrderByCreatedAtDesc(OrderStatus status);
 
   List<LaundryOrder> findAllByOrderByCreatedAtDesc();
+
+  List<LaundryOrder> findByCodConfirmationStatusOrderByCreatedAtDesc(
+      CodConfirmationStatus codConfirmationStatus);
 
   Optional<LaundryOrder> findByOrderNumber(String orderNumber);
 

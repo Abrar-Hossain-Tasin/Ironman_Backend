@@ -76,6 +76,18 @@ public class LaundryOrder {
   @Column(name = "payment_status", nullable = false, columnDefinition = "payment_status")
   private PaymentStatus paymentStatus = PaymentStatus.pending;
 
+  @Enumerated(EnumType.STRING)
+  @JdbcType(PostgreSQLEnumJdbcType.class)
+  @Column(name = "cod_confirmation_status", nullable = false,
+          columnDefinition = "cod_confirmation_status")
+  private CodConfirmationStatus codConfirmationStatus = CodConfirmationStatus.pending;
+
+  @Column(name = "customer_confirmed_at")
+  private Instant customerConfirmedAt;
+
+  @Column(name = "delivery_confirmed_at")
+  private Instant deliveryConfirmedAt;
+
   @Column(name = "total_amount", nullable = false)
   private BigDecimal totalAmount = BigDecimal.ZERO;
 
