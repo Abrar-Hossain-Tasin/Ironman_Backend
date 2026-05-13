@@ -45,7 +45,8 @@ public class SecurityConfig {
   public SecurityFilterChain securityFilterChain(
           HttpSecurity http,
           AuthenticationProvider authenticationProvider,
-          JwtAuthenticationFilter jwtAuthenticationFilter
+          JwtAuthenticationFilter jwtAuthenticationFilter,
+          AuthRateLimitFilter authRateLimitFilter
   ) throws Exception {
     return http
             // 2. MUST BE FIRST: Enable CORS with the source defined below
@@ -62,8 +63,22 @@ public class SecurityConfig {
                     .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
                     .anyRequest().authenticated()
             )
+            // Rate-limit auth endpoints before the JWT filter so we don't waste
+            // crypto cycles on bots flooding the login route.
+            .addFilterBefore(authRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
             .build();
+  }
+
+  /** Prevent Spring Boot from auto-registering AuthRateLimitFilter as a global
+   *  servlet filter — we add it explicitly to the SecurityFilterChain above so
+   *  ordering relative to JwtAuthenticationFilter is deterministic. */
+  @Bean
+  public FilterRegistrationBean<AuthRateLimitFilter> authRateLimitRegistration(
+          AuthRateLimitFilter filter) {
+    var reg = new FilterRegistrationBean<>(filter);
+    reg.setEnabled(false);
+    return reg;
   }
 
   @Bean

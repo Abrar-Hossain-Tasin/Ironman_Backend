@@ -1,8 +1,10 @@
 package com.ironman.service;
 
+import com.ironman.config.BadRequestException;
 import com.ironman.config.NotFoundException;
 import com.ironman.dto.user.AddressRequest;
 import com.ironman.dto.user.AddressResponse;
+import com.ironman.dto.user.ChangePasswordRequest;
 import com.ironman.dto.user.UpdateProfileRequest;
 import com.ironman.dto.user.UserSummary;
 import com.ironman.model.Address;
@@ -13,6 +15,7 @@ import com.ironman.repository.UserRepository;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +26,8 @@ public class UserService {
   private final UserRepository userRepository;
   private final AddressRepository addressRepository;
   private final CustomerProfileRepository customerProfileRepository;
+  private final PasswordEncoder passwordEncoder;
+  private final EmailService emailService;
 
   public UserSummary me() {
     return UserSummary.from(principalService.currentUser());
@@ -78,6 +83,25 @@ public class UserService {
     Address address = addressRepository.findByIdAndUserId(id, user.getId())
         .orElseThrow(() -> new NotFoundException("Address not found"));
     addressRepository.delete(address);
+  }
+
+  /**
+   * Logged-in password change. Requires the current password to be supplied to
+   * prevent session-hijack pivots, and emails the user once the change lands so
+   * they have an audit trail if it wasn't them.
+   */
+  @Transactional
+  public void changePassword(ChangePasswordRequest request) {
+    User user = principalService.currentUser();
+    if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
+      throw new BadRequestException("Current password is incorrect");
+    }
+    if (passwordEncoder.matches(request.newPassword(), user.getPasswordHash())) {
+      throw new BadRequestException("New password must be different from current password");
+    }
+    user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+    userRepository.save(user);
+    emailService.sendPasswordChanged(user.getEmail(), user.getFullName());
   }
 
   private void apply(Address address, AddressRequest request) {

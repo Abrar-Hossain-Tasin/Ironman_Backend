@@ -100,6 +100,61 @@ public class AuthService {
     return UserSummary.from(userRepository.save(user));
   }
 
+  /** Edit an existing staff member. Email collisions and role changes to
+   *  customer are rejected so admin can't accidentally lock anyone out of
+   *  staff-only routes. */
+  @Transactional
+  public UserSummary updateStaff(java.util.UUID id, com.ironman.dto.auth.UpdateStaffRequest request) {
+    if (request.role() == UserRole.customer) {
+      throw new BadRequestException("Staff role cannot be customer");
+    }
+    var user = userRepository.findById(id)
+        .orElseThrow(() -> new BadRequestException("Staff not found"));
+    if (user.getRole() == UserRole.customer) {
+      throw new BadRequestException("This account is not a staff account");
+    }
+    if (!user.getEmail().equalsIgnoreCase(request.email())
+        && userRepository.existsByEmailIgnoreCase(request.email())) {
+      throw new BadRequestException("Email is already registered");
+    }
+    user.setFullName(request.fullName());
+    user.setEmail(request.email());
+    user.setPhone(request.phone());
+    user.setRole(request.role());
+    user.setActive(request.active());
+    user.setUpdatedAt(java.time.Instant.now());
+    return UserSummary.from(userRepository.save(user));
+  }
+
+  /** Soft-deactivate a staff account. Prevents login (User#isEnabled checks
+   *  {@code active}) without losing assignment history. */
+  @Transactional
+  public UserSummary setStaffActive(java.util.UUID id, boolean active) {
+    var user = userRepository.findById(id)
+        .orElseThrow(() -> new BadRequestException("Staff not found"));
+    if (user.getRole() == UserRole.customer) {
+      throw new BadRequestException("This account is not a staff account");
+    }
+    user.setActive(active);
+    user.setUpdatedAt(java.time.Instant.now());
+    return UserSummary.from(userRepository.save(user));
+  }
+
+  /** Admin-driven password reset for a staff account — used when a worker
+   *  forgets their password and email reset is impractical. */
+  @Transactional
+  public void resetStaffPassword(java.util.UUID id, String newPassword) {
+    var user = userRepository.findById(id)
+        .orElseThrow(() -> new BadRequestException("Staff not found"));
+    if (user.getRole() == UserRole.customer) {
+      throw new BadRequestException("This account is not a staff account");
+    }
+    user.setPasswordHash(passwordEncoder.encode(newPassword));
+    user.setUpdatedAt(java.time.Instant.now());
+    userRepository.save(user);
+    emailService.sendPasswordChanged(user.getEmail(), user.getFullName());
+  }
+
   // ── Email verification ───────────────────────────────────────────────────
 
   /** Re-sends a verification code. Idempotent (any previous unconsumed code is invalidated). */

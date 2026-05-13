@@ -87,6 +87,19 @@ app:
     enabled: ${SMS_ENABLED:false}
   push:
     enabled: ${PUSH_ENABLED:false}
+  slots:
+    # Default capacity per slot. Override per-slot via SLOT_CAPACITY_DEFAULT or
+    # by extending this map. Slots list is the source of truth for the order
+    # wizard — adding a row here makes it pickable.
+    capacity-default: ${SLOT_CAPACITY_DEFAULT:20}
+    pickup:
+      - "10:00-12:00"
+      - "14:00-18:00"
+      - "18:00-20:00"
+    delivery:
+      - "10:00-12:00"
+      - "14:00-18:00"
+      - "18:00-20:00"
   branding:
     name: ${BRAND_NAME:Ironman Laundry}
     tagline: ${BRAND_TAGLINE:Premium laundry, delivered.}

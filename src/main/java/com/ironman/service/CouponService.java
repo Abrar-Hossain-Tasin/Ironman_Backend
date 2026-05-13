@@ -134,6 +134,29 @@ public class CouponService {
         .map(CouponResponse::from).toList();
   }
 
+  /**
+   * Coupons a customer should be allowed to discover from the UI — active,
+   * within their validity window, and with global capacity remaining. Filters
+   * out coupons the customer has already maxed out (per-user limit) and any
+   * coupon without a description (those tend to be internal / admin-only).
+   */
+  @Transactional(readOnly = true)
+  public List<CouponResponse> activeForCustomer(User customer) {
+    Instant now = Instant.now();
+    return couponRepository.findAllByOrderByCreatedAtDesc().stream()
+        .filter(Coupon::isActive)
+        .filter(c -> c.getDescription() != null && !c.getDescription().isBlank())
+        .filter(c -> c.getValidFrom() == null || !now.isBefore(c.getValidFrom()))
+        .filter(c -> c.getValidTo() == null || !now.isAfter(c.getValidTo()))
+        .filter(c -> c.getMaxUses() == null || c.getCurrentUses() < c.getMaxUses())
+        .filter(c -> {
+          long used = redemptionRepository.countByCouponIdAndCustomerId(c.getId(), customer.getId());
+          return used < c.getMaxUsesPerUser();
+        })
+        .map(CouponResponse::from)
+        .toList();
+  }
+
   private void apply(Coupon coupon, CouponRequest request) {
     coupon.setCode(request.code().trim().toUpperCase());
     coupon.setDescription(request.description());

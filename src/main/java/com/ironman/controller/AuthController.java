@@ -7,14 +7,20 @@ import com.ironman.dto.auth.LoginRequest;
 import com.ironman.dto.auth.RefreshTokenRequest;
 import com.ironman.dto.auth.RegisterRequest;
 import com.ironman.dto.auth.ResetPasswordRequest;
+import com.ironman.dto.auth.ResetStaffPasswordRequest;
+import com.ironman.dto.auth.UpdateStaffRequest;
 import com.ironman.dto.auth.VerifyEmailRequest;
 import com.ironman.dto.common.ApiMessage;
 import com.ironman.dto.user.UserSummary;
 import com.ironman.service.AuthService;
 import jakarta.validation.Valid;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -78,5 +84,36 @@ public class AuthController {
   @PostMapping("/admin/create-staff")
   public UserSummary createStaff(@Valid @RequestBody CreateStaffRequest request) {
     return authService.createStaff(request);
+  }
+
+  @PreAuthorize("hasRole('ADMIN')")
+  @PutMapping("/admin/staff/{id}")
+  public UserSummary updateStaff(@PathVariable UUID id,
+                                 @Valid @RequestBody UpdateStaffRequest request) {
+    return authService.updateStaff(id, request);
+  }
+
+  @PreAuthorize("hasRole('ADMIN')")
+  @PutMapping("/admin/staff/{id}/activate")
+  public UserSummary activateStaff(@PathVariable UUID id) {
+    return authService.setStaffActive(id, true);
+  }
+
+  /**
+   * Soft-deactivates the staff account. Login is blocked but the row + history
+   * stay so payments/assignments retain a stable foreign key.
+   */
+  @PreAuthorize("hasRole('ADMIN')")
+  @DeleteMapping("/admin/staff/{id}")
+  public UserSummary deactivateStaff(@PathVariable UUID id) {
+    return authService.setStaffActive(id, false);
+  }
+
+  @PreAuthorize("hasRole('ADMIN')")
+  @PutMapping("/admin/staff/{id}/reset-password")
+  public ApiMessage resetStaffPassword(@PathVariable UUID id,
+                                       @Valid @RequestBody ResetStaffPasswordRequest request) {
+    authService.resetStaffPassword(id, request.newPassword());
+    return new ApiMessage("Staff password reset. Share the new password securely.");
   }
 }

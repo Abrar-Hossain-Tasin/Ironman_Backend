@@ -3,13 +3,18 @@ package com.ironman.controller;
 import com.ironman.dto.pricing.ClothingTypeResponse;
 import com.ironman.dto.pricing.PricingResponse;
 import com.ironman.dto.pricing.ServiceCategoryResponse;
+import com.ironman.dto.pricing.SlotAvailabilityResponse;
 import com.ironman.service.PricingService;
+import com.ironman.service.SlotService;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -17,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class ServicesController {
   private final PricingService pricingService;
+  private final SlotService slotService;
 
   @GetMapping("/categories")
   public List<ServiceCategoryResponse> categories() {
@@ -36,5 +42,15 @@ public class ServicesController {
   @GetMapping("/pricing/{categoryId}/{clothingTypeId}")
   public PricingResponse pricingCell(@PathVariable UUID categoryId, @PathVariable UUID clothingTypeId) {
     return pricingService.currentPrice(categoryId, clothingTypeId);
+  }
+
+  /**
+   * Pickup/delivery slot availability for a given day. Capacity is set in
+   * application.yml under {@code app.slots}.
+   */
+  @GetMapping("/slots")
+  public SlotAvailabilityResponse slots(
+      @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+    return slotService.availability(date);
   }
 }

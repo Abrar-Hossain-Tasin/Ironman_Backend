@@ -81,6 +81,57 @@ public class AssignmentService {
     return AssignmentResponse.from(assignment);
   }
 
+  /**
+   * Mark a delivery assignment as failed (customer not home / wrong address /
+   * refused, etc). Only valid for {@code delivery} assignments while the order
+   * is {@code out_for_delivery} — anything else throws.
+   *
+   * <p>Flips the order status to {@link OrderStatus#delivery_failed} so admin
+   * can either re-assign delivery or escalate to {@code returned}.
+   */
+  @Transactional
+  public AssignmentResponse failDelivery(UUID id, String reason) {
+    User actor = principalService.currentUser();
+    OrderAssignment assignment = myAssignment(id);
+    if (assignment.getAssignmentType() != AssignmentType.delivery) {
+      throw new BadRequestException("Only delivery assignments can be marked failed");
+    }
+    if (assignment.getStatus() != AssignmentStatus.in_progress
+        && assignment.getStatus() != AssignmentStatus.accepted) {
+      throw new BadRequestException(
+          "Only accepted/in-progress deliveries can be marked failed");
+    }
+    LaundryOrder order = assignment.getOrder();
+    if (order.getStatus() != OrderStatus.out_for_delivery) {
+      throw new BadRequestException(
+          "Order must be out_for_delivery to mark a failed attempt. Current: "
+              + order.getStatus());
+    }
+
+    assignment.setStatus(AssignmentStatus.rejected);
+    assignment.setCompletedAt(Instant.now());
+    String existing = assignment.getNotes();
+    String trailer = (reason == null ? "" : "Failed: " + reason);
+    assignment.setNotes(existing == null || existing.isBlank() ? trailer : existing + "\n" + trailer);
+    assignmentRepository.save(assignment);
+
+    orderService.updateStatus(
+        order, OrderStatus.delivery_failed,
+        actor.getFullName() + " could not complete delivery — " + reason, actor);
+
+    notificationService.notifyUser(order.getCustomer(),
+        "Delivery attempt failed — " + order.getOrderNumber(),
+        "Our delivery agent couldn't complete delivery. Reason: " + reason
+            + ". We'll be in touch to reschedule.",
+        "delivery_failed", order.getId());
+    notificationService.notifyAdmins(
+        "Delivery failed — " + order.getOrderNumber(),
+        actor.getFullName() + " marked delivery failed: " + reason,
+        "delivery_failed_admin", order.getId());
+
+    return AssignmentResponse.from(assignment);
+  }
+
   @Transactional
   public List<AssignmentResponse> batchComplete(BatchAssignmentActionRequest request) {
     User actor = principalService.currentUser();

@@ -3,6 +3,7 @@ package com.ironman.controller;
 import com.ironman.dto.common.ApiMessage;
 import com.ironman.dto.user.AddressRequest;
 import com.ironman.dto.user.AddressResponse;
+import com.ironman.dto.user.ChangePasswordRequest;
 import com.ironman.dto.user.UpdateProfileRequest;
 import com.ironman.dto.user.UserSummary;
 import com.ironman.service.UserService;
@@ -54,5 +55,11 @@ public class UserController {
   public ApiMessage deleteAddress(@PathVariable UUID id) {
     userService.deleteAddress(id);
     return new ApiMessage("Address deleted");
+  }
+
+  @PutMapping("/me/password")
+  public ApiMessage changePassword(@Valid @RequestBody ChangePasswordRequest request) {
+    userService.changePassword(request);
+    return new ApiMessage("Password updated");
   }
 }
