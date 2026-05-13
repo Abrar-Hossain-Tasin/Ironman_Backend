@@ -7,6 +7,8 @@ import com.ironman.model.AssignmentType;
 import com.ironman.model.OrderAssignment;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
 
 public record AssignmentResponse(
@@ -23,7 +25,8 @@ public record AssignmentResponse(
     Instant completedAt,
     String preferredTime,
     BigDecimal amountDue,
-    String notes
+    String notes,
+    List<String> photoUrls
 ) {
   public static AssignmentResponse from(OrderAssignment assignment) {
     var order = assignment.getOrder();
@@ -50,8 +53,17 @@ public record AssignmentResponse(
         assignment.getCompletedAt(),
         preferredTime(assignment),
         customerFacing && amountDue.signum() > 0 ? amountDue : null,
-        assignment.getNotes()
+        assignment.getNotes(),
+        splitPhotoUrls(assignment.getPhotoUrls())
     );
+  }
+
+  private static List<String> splitPhotoUrls(String raw) {
+    if (raw == null || raw.isBlank()) return List.of();
+    return Arrays.stream(raw.split(","))
+        .map(String::trim)
+        .filter(value -> !value.isBlank())
+        .toList();
   }
 
   private static String preferredTime(OrderAssignment assignment) {

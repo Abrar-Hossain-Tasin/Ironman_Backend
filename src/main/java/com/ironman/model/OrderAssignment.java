@@ -61,4 +61,7 @@ public class OrderAssignment {
   private AssignmentStatus status = AssignmentStatus.pending;
 
   private String notes;
+
+  @Column(name = "photo_urls", columnDefinition = "text")
+  private String photoUrls;
 }

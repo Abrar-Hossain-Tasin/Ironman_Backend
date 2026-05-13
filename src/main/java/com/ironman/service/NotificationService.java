@@ -116,6 +116,25 @@ public class NotificationService {
             .forEach(admin -> notifyUser(admin, title, body, type, referenceId));
   }
 
+  /**
+   * Send a one-off broadcast to every active user, optionally filtered to a
+   * single role. Used by the admin broadcasts UI for system announcements
+   * (e.g. service notices, promo launches). Returns the recipient count.
+   */
+  @Transactional
+  public int broadcast(String title, String body, UserRole role) {
+    var recipients = role == null
+            ? userRepository.findAll()
+            : userRepository.findByRole(role);
+    int count = 0;
+    for (User user : recipients) {
+      if (!user.isActive()) continue;
+      notifyUser(user, title, body, "broadcast", null);
+      count++;
+    }
+    return count;
+  }
+
   public List<NotificationResponse> mine() {
     return notificationRepository
             .findByUserIdOrderByCreatedAtDesc(principalService.currentUser().getId())

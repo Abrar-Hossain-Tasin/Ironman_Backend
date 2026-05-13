@@ -4,6 +4,7 @@ import com.ironman.config.BadRequestException;
 import com.ironman.config.NotFoundException;
 import com.ironman.dto.order.AssignmentActionRequest;
 import com.ironman.dto.order.AssignmentResponse;
+import com.ironman.dto.order.BatchAssignmentActionRequest;
 import com.ironman.dto.order.PickupReconcileRequest;
 import com.ironman.model.AssignmentStatus;
 import com.ironman.model.AssignmentType;
@@ -17,6 +18,7 @@ import com.ironman.repository.OrderAssignmentRepository;
 import com.ironman.repository.OrderItemRepository;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -73,19 +75,43 @@ public class AssignmentService {
   @Transactional
   public AssignmentResponse complete(UUID id, AssignmentActionRequest request) {
     User actor = principalService.currentUser();
+    OrderAssignment assignment = completeOne(id, request);
+    OrderStatus status = completionStatus(assignment.getAssignmentType());
+    orderService.updateStatus(assignment.getOrder(), status, actor.getFullName() + " completed " + assignment.getAssignmentType().name(), actor);
+    return AssignmentResponse.from(assignment);
+  }
+
+  @Transactional
+  public List<AssignmentResponse> batchComplete(BatchAssignmentActionRequest request) {
+    User actor = principalService.currentUser();
+    List<AssignmentResponse> results = new ArrayList<>(request.assignmentIds().size());
+    AssignmentActionRequest perItem = new AssignmentActionRequest(request.notes(), request.photoUrls());
+    for (UUID id : request.assignmentIds()) {
+      OrderAssignment assignment = completeOne(id, perItem);
+      OrderStatus status = completionStatus(assignment.getAssignmentType());
+      orderService.updateStatus(assignment.getOrder(), status,
+          actor.getFullName() + " completed " + assignment.getAssignmentType().name(), actor);
+      results.add(AssignmentResponse.from(assignment));
+    }
+    return results;
+  }
+
+  private OrderAssignment completeOne(UUID id, AssignmentActionRequest request) {
     OrderAssignment assignment = myAssignment(id);
     if (assignment.getStatus() != AssignmentStatus.in_progress && assignment.getStatus() != AssignmentStatus.accepted) {
       throw new BadRequestException("Assignment cannot be completed");
     }
     assignment.setStatus(AssignmentStatus.completed);
     assignment.setCompletedAt(Instant.now());
-    if (request != null && request.notes() != null) {
-      assignment.setNotes(request.notes());
+    if (request != null) {
+      if (request.notes() != null) {
+        assignment.setNotes(request.notes());
+      }
+      if (request.photoUrls() != null && !request.photoUrls().isEmpty()) {
+        assignment.setPhotoUrls(String.join(",", request.photoUrls()));
+      }
     }
-    assignment = assignmentRepository.save(assignment);
-    OrderStatus status = completionStatus(assignment.getAssignmentType());
-    orderService.updateStatus(assignment.getOrder(), status, actor.getFullName() + " completed " + assignment.getAssignmentType().name(), actor);
-    return AssignmentResponse.from(assignment);
+    return assignmentRepository.save(assignment);
   }
 
   @Transactional
@@ -127,8 +153,16 @@ public class AssignmentService {
     order.setUpdatedAt(Instant.now());
     orderRepository.save(order);
 
+    boolean dirty = false;
     if (request.notes() != null && !request.notes().isBlank()) {
       assignment.setNotes(request.notes());
+      dirty = true;
+    }
+    if (request.photoUrls() != null && !request.photoUrls().isEmpty()) {
+      assignment.setPhotoUrls(String.join(",", request.photoUrls()));
+      dirty = true;
+    }
+    if (dirty) {
       assignmentRepository.save(assignment);
     }
 

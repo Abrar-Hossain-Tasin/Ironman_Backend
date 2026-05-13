@@ -9,8 +9,13 @@ import java.util.UUID;
 
 public record PickupReconcileRequest(
     @Valid @NotEmpty List<ItemCount> items,
-    String notes
+    String notes,
+    List<String> photoUrls
 ) {
+  public PickupReconcileRequest(List<ItemCount> items, String notes) {
+    this(items, notes, List.of());
+  }
+
   public record ItemCount(
       @NotNull UUID itemId,
       @Min(0) int actualQuantity

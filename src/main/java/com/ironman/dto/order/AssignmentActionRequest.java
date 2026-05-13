@@ -1,3 +1,9 @@
 package com.ironman.dto.order;
 
-public record AssignmentActionRequest(String notes) {}
+import java.util.List;
+
+public record AssignmentActionRequest(String notes, List<String> photoUrls) {
+  public AssignmentActionRequest(String notes) {
+    this(notes, List.of());
+  }
+}

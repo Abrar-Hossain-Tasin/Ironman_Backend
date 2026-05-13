@@ -2,7 +2,9 @@ package com.ironman.controller;
 
 import com.ironman.dto.order.AssignmentActionRequest;
 import com.ironman.dto.order.AssignmentResponse;
+import com.ironman.dto.order.BatchAssignmentActionRequest;
 import com.ironman.service.AssignmentService;
+import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -34,5 +36,10 @@ public class WorkerController {
   @PutMapping("/assignments/{id}/complete")
   public AssignmentResponse complete(@PathVariable UUID id, @RequestBody(required = false) AssignmentActionRequest request) {
     return assignmentService.complete(id, request);
+  }
+
+  @PutMapping("/assignments/batch-complete")
+  public List<AssignmentResponse> batchComplete(@Valid @RequestBody BatchAssignmentActionRequest request) {
+    return assignmentService.batchComplete(request);
   }
 }
