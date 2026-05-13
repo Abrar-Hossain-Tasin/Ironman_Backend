@@ -27,11 +27,7 @@ import com.lowagie.text.pdf.PdfPageEventHelper;
 import com.lowagie.text.pdf.PdfWriter;
 import java.awt.Color;
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.math.BigDecimal;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -248,23 +244,18 @@ public class ReceiptPdfService {
     }
 
     private void drawLogo(PdfContentByte cb, Rectangle page, Document document) {
-      String path = branding.getLogoPath();
-      if (path == null || path.isBlank()) {
+      String url = branding.getLogoUrl();
+      if (url == null || url.isBlank()) {
         return;
       }
       try {
-        Path resolved = Paths.get(path);
-        if (!Files.exists(resolved)) {
-          log.debug("Receipt logo not found at {}", resolved.toAbsolutePath());
-          return;
-        }
-        Image logo = Image.getInstance(resolved.toAbsolutePath().toString());
+        Image logo = Image.getInstance(new java.net.URL(url));
         logo.scaleToFit(48, 48);
         logo.setAbsolutePosition(
             document.leftMargin(), page.getTop() - 60);
         cb.addImage(logo);
-      } catch (IOException ex) {
-        log.warn("Failed to embed receipt logo: {}", ex.getMessage());
+      } catch (Exception ex) {
+        log.warn("Failed to embed receipt logo from {}: {}", url, ex.getMessage());
       }
     }
 

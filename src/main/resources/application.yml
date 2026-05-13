@@ -63,16 +63,6 @@ spring:
         jdbc:
           time_zone: Asia/Dhaka
 
-  # ── Mail ────────────────────────────────────────────────────────────────────
-  mail:
-    host: ${MAIL_HOST:localhost}
-    port: ${MAIL_PORT:25}
-    username: ${MAIL_USERNAME:}
-    password: ${MAIL_PASSWORD:}
-    properties:
-      mail.smtp.auth: ${MAIL_SMTP_AUTH:false}
-      mail.smtp.starttls.enable: ${MAIL_SMTP_STARTTLS_ENABLE:false}
-
   # ── Async thread pool (for EmailService) ────────────────────────────────────
   task:
     execution:
@@ -92,6 +82,7 @@ app:
   mail:
     enabled: ${MAIL_ENABLED:false}
     from: ${MAIL_FROM:noreply@ironman-laundry.com}
+    api-key: ${RESEND_API_KEY:}
   sms:
     enabled: ${SMS_ENABLED:false}
   push:
@@ -100,7 +91,7 @@ app:
     name: ${BRAND_NAME:Ironman Laundry}
     tagline: ${BRAND_TAGLINE:Premium laundry, delivered.}
     theme-color: ${THEME_COLOR:#F5A623}
-    logo-path: ${BRAND_LOGO_PATH:../Ironman_Frontend/public/Ironman-logo.png}
+    logo-url: ${BRAND_LOGO_URL:}
     company-address: ${BRAND_ADDRESS:Dhaka, Bangladesh}
     contact-phone: ${BRAND_PHONE:+880 1700 000000}
     contact-email: ${BRAND_EMAIL:support@ironman-laundry.com}

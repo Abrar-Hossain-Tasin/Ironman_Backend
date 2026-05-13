@@ -24,13 +24,8 @@ public class EmailTemplateService {
 
   private final BrandingProperties branding;
 
-  public String logoContentId() {
-    return "ironman-logo";
-  }
-
-  /** True when a logo file is configured and present. */
   public boolean hasLogo() {
-    return branding.getLogoPath() != null && !branding.getLogoPath().isBlank();
+    return branding.getLogoUrl() != null && !branding.getLogoUrl().isBlank();
   }
 
   /** Plain-text fallback derived from an HTML body — for the multipart alternative. */
@@ -59,7 +54,7 @@ public class EmailTemplateService {
     String address = branding.getCompanyAddress() == null ? "" : escape(branding.getCompanyAddress());
 
     String logoBlock = hasLogo()
-        ? "<img src=\"cid:" + logoContentId() + "\" alt=\"" + name
+        ? "<img src=\"" + escape(branding.getLogoUrl()) + "\" alt=\"" + name
             + "\" width=\"56\" height=\"56\" style=\"display:block;border-radius:8px;background:#ffffff;padding:6px;\" />"
         : "<div style=\"font:700 22px/1 'Helvetica Neue',Arial,sans-serif;color:#ffffff;letter-spacing:1px;\">"
             + name.toUpperCase() + "</div>";

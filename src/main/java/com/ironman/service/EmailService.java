@@ -1,85 +1,83 @@
 package com.ironman.service;
 
 import com.ironman.config.BrandingProperties;
-import jakarta.mail.internet.MimeMessage;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.ByteArrayResource;
-import org.springframework.core.io.FileSystemResource;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 
 /**
- * Sends transactional emails. Every message goes out as a multipart/alternative
- * MIME with a themed HTML body (logo embedded via CID) and a plaintext fallback
- * derived from the HTML — so it looks right in Gmail/Outlook and stays readable
- * in plaintext-only clients.
+ * Sends transactional emails via the Resend HTTP API (https://resend.com).
+ * Uses HTTPS on port 443 — not SMTP — so it works on Render and similar
+ * platforms that block outbound port 587/465.
  *
- * Disabled mode ({@code app.mail.enabled=false}) just logs and returns; useful
- * in local dev.
+ * Disabled mode (app.mail.enabled=false) just logs and returns; useful in
+ * local dev where RESEND_API_KEY is not configured.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class EmailService {
 
-  private final JavaMailSender mailSender;
+  private static final String RESEND_API = "https://api.resend.com/emails";
+
   private final EmailTemplateService templates;
   private final BrandingProperties branding;
+  private final RestTemplate restTemplate;
 
   @Value("${app.mail.from:noreply@ironman-laundry.com}")
   private String fromAddress;
+
+  @Value("${app.mail.api-key:}")
+  private String apiKey;
 
   @Value("${app.mail.enabled:false}")
   private boolean mailEnabled;
 
   // ─── Low-level send ──────────────────────────────────────────────────────
 
-  /**
-   * Generic notification email — used by NotificationService. Wraps the plain
-   * body in the themed shell so all in-app notifications also arrive as
-   * properly designed emails.
-   */
   @Async
   public void send(String to, String subject, String body) {
-    String html = templates.genericNotification(subject, body);
-    sendHtml(to, subject, html);
+    sendHtml(to, subject, templates.genericNotification(subject, body));
   }
 
-  /** Sends a pre-rendered HTML email with the logo embedded as inline CID. */
   @Async
   public void sendHtml(String to, String subject, String html) {
     if (!mailEnabled) {
       log.info("[EMAIL SKIPPED] To: {} | Subject: {}", to, subject);
       return;
     }
+    if (apiKey == null || apiKey.isBlank()) {
+      log.warn("[EMAIL SKIPPED] RESEND_API_KEY not set — To: {} | Subject: {}", to, subject);
+      return;
+    }
     try {
-      MimeMessage message = mailSender.createMimeMessage();
-      MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-      helper.setFrom(fromAddress, branding.getName());
-      helper.setTo(to);
-      helper.setSubject(subject);
+      HttpHeaders headers = new HttpHeaders();
+      headers.setContentType(MediaType.APPLICATION_JSON);
+      headers.setBearerAuth(apiKey);
 
-      // HTML body + plaintext alternative.
-      helper.setText(templates.toPlainText(html), html);
+      Map<String, Object> body = Map.of(
+          "from", branding.getName() + " <" + fromAddress + ">",
+          "to", List.of(to),
+          "subject", subject,
+          "html", html,
+          "text", templates.toPlainText(html)
+      );
 
-      attachLogoIfPresent(helper);
-
-      mailSender.send(message);
+      restTemplate.postForObject(RESEND_API, new HttpEntity<>(body, headers), Map.class);
       log.info("Email sent → {} — {}", to, subject);
     } catch (Exception ex) {
       log.error("Email failed → {}: {}", to, ex.getMessage());
     }
   }
 
-  /** Attaches a PDF/binary while keeping the themed HTML body. */
   @Async
   public void sendWithAttachment(String to, String subject, String body,
                                  String filename, byte[] attachment,
@@ -89,40 +87,44 @@ public class EmailService {
           to, subject, filename, attachment == null ? 0 : attachment.length);
       return;
     }
+    // Resend supports attachments as base64 in the JSON payload
+    if (apiKey == null || apiKey.isBlank()) {
+      log.warn("[EMAIL SKIPPED] RESEND_API_KEY not set — attachment email dropped");
+      return;
+    }
     try {
+      HttpHeaders headers = new HttpHeaders();
+      headers.setContentType(MediaType.APPLICATION_JSON);
+      headers.setBearerAuth(apiKey);
+
       String html = templates.genericNotification(subject, body);
-      MimeMessage message = mailSender.createMimeMessage();
-      MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-      helper.setFrom(fromAddress, branding.getName());
-      helper.setTo(to);
-      helper.setSubject(subject);
-      helper.setText(templates.toPlainText(html), html);
-      attachLogoIfPresent(helper);
+
+      var payload = new java.util.HashMap<String, Object>();
+      payload.put("from", branding.getName() + " <" + fromAddress + ">");
+      payload.put("to", List.of(to));
+      payload.put("subject", subject);
+      payload.put("html", html);
+      payload.put("text", templates.toPlainText(html));
+
       if (attachment != null && filename != null) {
-        helper.addAttachment(filename, new ByteArrayResource(attachment), contentType);
+        String encoded = java.util.Base64.getEncoder().encodeToString(attachment);
+        payload.put("attachments", List.of(Map.of(
+            "filename", filename,
+            "content", encoded
+        )));
       }
-      mailSender.send(message);
+
+      restTemplate.postForObject(RESEND_API, new HttpEntity<>(payload, headers), Map.class);
       log.info("Email with attachment sent → {} — {} ({})", to, subject, filename);
     } catch (Exception ex) {
       log.error("Email with attachment failed → {}: {}", to, ex.getMessage());
     }
   }
 
-  private void attachLogoIfPresent(MimeMessageHelper helper) throws Exception {
-    if (!templates.hasLogo()) return;
-    Path logoPath = Paths.get(branding.getLogoPath());
-    if (!Files.exists(logoPath) || !Files.isReadable(logoPath)) {
-      log.debug("Brand logo not readable at {} — sending without inline image", logoPath);
-      return;
-    }
-    helper.addInline(templates.logoContentId(), new FileSystemResource(logoPath));
-  }
-
-  // ─── Templates (every one a themed HTML email) ───────────────────────────
+  // ─── Templates ───────────────────────────────────────────────────────────
 
   public void sendWelcome(String to, String name) {
-    String inner = ""
-        + "<p style=\"margin:0;font:400 15px/1.6 'Helvetica Neue',Arial,sans-serif;color:#374151;\">"
+    String inner = "<p style=\"margin:0;font:400 15px/1.6 'Helvetica Neue',Arial,sans-serif;color:#374151;\">"
         + "Welcome aboard! Your account is ready. You can now place laundry orders, "
         + "schedule pickups, and track everything live from the app."
         + "</p>"
@@ -136,7 +138,7 @@ public class EmailService {
         + "address. The code expires in " + expiryMinutes + " minutes.";
     String inner = templates.codeBox(code, "This code expires in " + expiryMinutes + " minutes")
         + "<p style=\"margin:14px 0 0 0;font:400 13px/1.6 'Helvetica Neue',Arial,sans-serif;color:#6b7280;\">"
-        + "If you didn’t try to sign up or sign in, you can safely ignore this email.</p>";
+        + "If you didn't try to sign up or sign in, you can safely ignore this email.</p>";
     sendHtml(to, "Verify your email — code " + code,
         templates.wrap("Confirm your email", intro, inner));
   }
@@ -146,14 +148,14 @@ public class EmailService {
         + "Use the code below to choose a new one. It expires in " + expiryMinutes + " minutes.";
     String inner = templates.codeBox(code, "Enter this code in the password-reset screen")
         + "<p style=\"margin:14px 0 0 0;font:400 13px/1.6 'Helvetica Neue',Arial,sans-serif;color:#6b7280;\">"
-        + "If you didn’t request a password reset, ignore this email — your password stays the same.</p>";
+        + "If you didn't request a password reset, ignore this email — your password stays the same.</p>";
     sendHtml(to, "Reset your password — code " + code,
         templates.wrap("Reset your password", intro, inner));
   }
 
   public void sendPasswordChanged(String to, String name) {
     String inner = "<p style=\"margin:0;font:400 15px/1.6 'Helvetica Neue',Arial,sans-serif;color:#374151;\">"
-        + "Hi " + escape(name) + ", your password was just updated. If this wasn’t you, "
+        + "Hi " + escape(name) + ", your password was just updated. If this wasn't you, "
         + "contact support immediately.</p>";
     sendHtml(to, "Your password was changed",
         templates.wrap("Password updated", "", inner));
@@ -169,7 +171,7 @@ public class EmailService {
     sendHtml(to, "Order placed — " + orderNo,
         templates.wrap("We received your order",
             "Dear " + escape(name) + ", thanks for placing your order with us. "
-                + "We’ll confirm and assign a pickup agent shortly.", inner));
+                + "We'll confirm and assign a pickup agent shortly.", inner));
   }
 
   public void sendOrderConfirmed(String to, String name, String orderNo) {

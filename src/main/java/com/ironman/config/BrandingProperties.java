@@ -13,7 +13,7 @@ public class BrandingProperties {
   private String name = "Ironman Laundry";
   private String tagline = "Premium laundry, delivered.";
   private String themeColor = "#F5A623";
-  private String logoPath;
+  private String logoUrl;
   private String companyAddress;
   private String contactPhone;
   private String contactEmail;
