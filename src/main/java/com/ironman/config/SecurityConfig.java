@@ -1,6 +1,7 @@
 package com.ironman.config;
 
 import com.ironman.repository.UserRepository;
+import jakarta.servlet.http.HttpServletResponse;
 import java.util.Arrays;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -61,7 +62,18 @@ public class SecurityConfig {
                     .requestMatchers("/api/v1/services/**", "/api/v1/tracking/**").permitAll()
                     // Allow preflight OPTIONS requests
                     .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
+                    // Admin paths — require ADMIN role at the filter chain level (defence-in-depth
+                    // alongside the @PreAuthorize annotations on the controllers)
+                    .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                     .anyRequest().authenticated()
+            )
+            // Without an explicit AuthenticationEntryPoint Spring Security 6 falls back to
+            // Http403ForbiddenEntryPoint, so an expired / missing token returns 403 instead of
+            // 401, and the frontend never knows to refresh.  Return 401 so the client can
+            // trigger the token-refresh flow correctly.
+            .exceptionHandling(ex -> ex
+                    .authenticationEntryPoint((request, response, authException) ->
+                            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized"))
             )
             // Rate-limit auth endpoints before the JWT filter so we don't waste
             // crypto cycles on bots flooding the login route.
