@@ -84,24 +84,30 @@ public class SecurityConfig {
   @Bean
   public CorsConfigurationSource corsConfigurationSource() {
     var configuration = new CorsConfiguration();
-    
-    // Convert comma-separated string to list and trim whitespace
+
+    // Comma-separated, trimmed. Supports glob patterns (e.g. https://ironman-frontend-*.vercel.app)
+    // via setAllowedOriginPatterns so Vercel preview deployments work without redeploying the API.
     List<String> origins = Arrays.stream(allowedOrigins.split(","))
             .map(String::trim)
+            .filter(s -> !s.isEmpty())
             .toList();
-    
-    configuration.setAllowedOrigins(origins);
+
+    configuration.setAllowedOriginPatterns(origins);
     configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-    
+
     // Standard headers plus any custom headers your frontend might send
     configuration.setAllowedHeaders(Arrays.asList(
-            "Authorization", 
-            "Content-Type", 
-            "Accept", 
-            "X-Requested-With", 
+            "Authorization",
+            "Content-Type",
+            "Accept",
+            "X-Requested-With",
             "Cache-Control"
     ));
-    
+
+    // Expose the Retry-After header so the frontend can show "try again in N seconds"
+    // when the AuthRateLimitFilter kicks in (otherwise the browser hides it).
+    configuration.setExposedHeaders(Arrays.asList("Retry-After"));
+
     configuration.setAllowCredentials(true);
     configuration.setMaxAge(3600L); // Cache preflight for 1 hour
 
