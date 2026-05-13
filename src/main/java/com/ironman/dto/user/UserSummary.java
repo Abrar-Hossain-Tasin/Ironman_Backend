@@ -11,7 +11,8 @@ public record UserSummary(
     String phone,
     UserRole role,
     String profilePictureUrl,
-    boolean active
+    boolean active,
+    boolean emailVerified
 ) {
   public static UserSummary from(User user) {
     return new UserSummary(
@@ -21,7 +22,8 @@ public record UserSummary(
         user.getPhone(),
         user.getRole(),
         user.getProfilePictureUrl(),
-        user.isActive()
+        user.isActive(),
+        user.isEmailVerified()
     );
   }
 }
