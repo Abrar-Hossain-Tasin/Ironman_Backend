@@ -21,12 +21,16 @@ public final class ProductionEnvironmentValidator {
     requireAllowedOrigins(environment, errors);
     requireTrue(environment, "app.auth.cookies.secure", "AUTH_COOKIE_SECURE", errors);
     requireSameSiteNone(environment, errors);
-    requireSecret(environment, "app.payments.webhook-secret", "PAYMENT_WEBHOOK_SECRET", errors);
-    requireRawSecret(environment, "PAYMENT_WEBHOOK_BKASH_SECRET", errors);
-    requireRawSecret(environment, "PAYMENT_WEBHOOK_NAGAD_SECRET", errors);
-    requireRawSecret(environment, "PAYMENT_WEBHOOK_ROCKET_SECRET", errors);
-    requireRawSecret(environment, "PAYMENT_WEBHOOK_CARD_SECRET", errors);
-    requireSecret(environment, "sentry.dsn", "SENTRY_DSN", errors);
+    if (isFeatureEnabled(environment, "PAYMENTS_ENABLED", "app.payments.enabled", false)) {
+      requireSecret(environment, "app.payments.webhook-secret", "PAYMENT_WEBHOOK_SECRET", errors);
+      requireRawSecret(environment, "PAYMENT_WEBHOOK_BKASH_SECRET", errors);
+      requireRawSecret(environment, "PAYMENT_WEBHOOK_NAGAD_SECRET", errors);
+      requireRawSecret(environment, "PAYMENT_WEBHOOK_ROCKET_SECRET", errors);
+      requireRawSecret(environment, "PAYMENT_WEBHOOK_CARD_SECRET", errors);
+    }
+    if (isFeatureEnabled(environment, "SENTRY_ENABLED", "sentry.enabled", false)) {
+      requireSecret(environment, "sentry.dsn", "SENTRY_DSN", errors);
+    }
     requireMailIfEnabled(environment, errors);
 
     if (!errors.isEmpty()) {
@@ -130,6 +134,22 @@ public final class ProductionEnvironmentValidator {
 
   private static String property(Environment environment, String key) {
     return environment.getProperty(key, "").trim();
+  }
+
+  private static boolean isFeatureEnabled(
+      Environment environment,
+      String envName,
+      String propertyKey,
+      boolean defaultValue
+  ) {
+    String raw = environment.getProperty(envName);
+    if (!hasText(raw)) {
+      raw = environment.getProperty(propertyKey);
+    }
+    if (!hasText(raw)) {
+      return defaultValue;
+    }
+    return Boolean.parseBoolean(raw.trim());
   }
 
   private static boolean isPlaceholder(String value) {
