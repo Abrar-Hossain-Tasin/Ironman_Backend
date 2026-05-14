@@ -47,6 +47,7 @@ public class SecurityConfig {
           HttpSecurity http,
           AuthenticationProvider authenticationProvider,
           JwtAuthenticationFilter jwtAuthenticationFilter,
+          CsrfProtectionFilter csrfProtectionFilter,
           AuthRateLimitFilter authRateLimitFilter
   ) throws Exception {
     return http
@@ -59,6 +60,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                     // Permit all auth-related endpoints here so CORS headers are still applied
                     .requestMatchers("/api/v1/auth/**", "/api/v1/health").permitAll()
+                    .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/v1/payment-webhooks/**").permitAll()
                     .requestMatchers("/api/v1/services/**", "/api/v1/tracking/**").permitAll()
                     // Allow preflight OPTIONS requests
                     .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
@@ -78,6 +80,7 @@ public class SecurityConfig {
             // Rate-limit auth endpoints before the JWT filter so we don't waste
             // crypto cycles on bots flooding the login route.
             .addFilterBefore(authRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterBefore(csrfProtectionFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
             .build();
   }
@@ -88,6 +91,14 @@ public class SecurityConfig {
   @Bean
   public FilterRegistrationBean<AuthRateLimitFilter> authRateLimitRegistration(
           AuthRateLimitFilter filter) {
+    var reg = new FilterRegistrationBean<>(filter);
+    reg.setEnabled(false);
+    return reg;
+  }
+
+  @Bean
+  public FilterRegistrationBean<CsrfProtectionFilter> csrfFilterRegistration(
+          CsrfProtectionFilter filter) {
     var reg = new FilterRegistrationBean<>(filter);
     reg.setEnabled(false);
     return reg;
@@ -113,12 +124,13 @@ public class SecurityConfig {
             "Content-Type",
             "Accept",
             "X-Requested-With",
-            "Cache-Control"
+            "Cache-Control",
+            AuthCookieService.CSRF_HEADER
     ));
 
     // Expose the Retry-After header so the frontend can show "try again in N seconds"
     // when the AuthRateLimitFilter kicks in (otherwise the browser hides it).
-    configuration.setExposedHeaders(Arrays.asList("Retry-After"));
+    configuration.setExposedHeaders(Arrays.asList("Retry-After", AuthCookieService.CSRF_HEADER));
 
     configuration.setAllowCredentials(true);
     configuration.setMaxAge(3600L); // Cache preflight for 1 hour

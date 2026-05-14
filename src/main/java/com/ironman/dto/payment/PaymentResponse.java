@@ -19,6 +19,7 @@ public record PaymentResponse(
     String payerPhone,
     String notes,
     boolean verified,
+    boolean appliedToBalance,
     UUID verifiedBy,
     Instant verifiedAt
 ) {
@@ -38,6 +39,7 @@ public record PaymentResponse(
         payment.getPayerPhone(),
         payment.getNotes(),
         payment.isVerified(),
+        payment.isAppliedToBalance(),
         verifier == null ? null : verifier.getId(),
         payment.getVerifiedAt()
     );

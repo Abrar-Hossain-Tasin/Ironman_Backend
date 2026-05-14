@@ -78,6 +78,10 @@ app:
     refresh-token-days: ${JWT_REFRESH_TOKEN_DAYS:14}
   cors:
     allowed-origins: ${ALLOWED_ORIGINS:http://localhost:3000}
+  auth:
+    cookies:
+      secure: ${AUTH_COOKIE_SECURE:false}
+      same-site: ${AUTH_COOKIE_SAME_SITE:Lax}
   timezone: Asia/Dhaka
   mail:
     enabled: ${MAIL_ENABLED:false}
@@ -87,6 +91,38 @@ app:
     enabled: ${SMS_ENABLED:false}
   push:
     enabled: ${PUSH_ENABLED:false}
+  payments:
+    webhook-secret: ${PAYMENT_WEBHOOK_SECRET:}
+    webhooks:
+      signature-tolerance: ${PAYMENT_WEBHOOK_SIGNATURE_TOLERANCE:PT5M}
+      max-attempts: ${PAYMENT_WEBHOOK_MAX_ATTEMPTS:6}
+      retry-base-delay: ${PAYMENT_WEBHOOK_RETRY_BASE_DELAY:PT5M}
+      retry-fixed-delay-ms: ${PAYMENT_WEBHOOK_RETRY_FIXED_DELAY_MS:60000}
+      providers:
+        bkash:
+          secret: ${PAYMENT_WEBHOOK_BKASH_SECRET:${PAYMENT_WEBHOOK_SECRET:}}
+          signature-header: X-BKash-Signature
+          timestamp-header: X-BKash-Timestamp
+          event-id-header: X-BKash-Event-Id
+          idempotency-header: X-BKash-Idempotency-Key
+        nagad:
+          secret: ${PAYMENT_WEBHOOK_NAGAD_SECRET:${PAYMENT_WEBHOOK_SECRET:}}
+          signature-header: X-Nagad-Signature
+          timestamp-header: X-Nagad-Timestamp
+          event-id-header: X-Nagad-Event-Id
+          idempotency-header: X-Nagad-Idempotency-Key
+        rocket:
+          secret: ${PAYMENT_WEBHOOK_ROCKET_SECRET:${PAYMENT_WEBHOOK_SECRET:}}
+          signature-header: X-Rocket-Signature
+          timestamp-header: X-Rocket-Timestamp
+          event-id-header: X-Rocket-Event-Id
+          idempotency-header: X-Rocket-Idempotency-Key
+        card:
+          secret: ${PAYMENT_WEBHOOK_CARD_SECRET:${PAYMENT_WEBHOOK_SECRET:}}
+          signature-header: X-Card-Signature
+          timestamp-header: X-Card-Timestamp
+          event-id-header: X-Card-Event-Id
+          idempotency-header: X-Card-Idempotency-Key
   slots:
     # Default capacity per slot. Override per-slot via SLOT_CAPACITY_DEFAULT or
     # by extending this map. Slots list is the source of truth for the order
@@ -113,3 +149,9 @@ app:
 springdoc:
   api-docs:
     enabled: true
+
+sentry:
+  dsn: ${SENTRY_DSN:}
+  environment: ${SENTRY_ENVIRONMENT:${SPRING_PROFILES_ACTIVE:local}}
+  traces-sample-rate: ${SENTRY_TRACES_SAMPLE_RATE:0.10}
+  send-default-pii: false

@@ -72,10 +72,17 @@ public class AuthService {
   }
 
   public AuthResponse refresh(RefreshTokenRequest request) {
-    String email = jwtService.subject(request.refreshToken());
+    return refresh(request.refreshToken());
+  }
+
+  public AuthResponse refresh(String refreshToken) {
+    if (refreshToken == null || refreshToken.isBlank()) {
+      throw new BadRequestException("Invalid refresh token");
+    }
+    String email = jwtService.subject(refreshToken);
     var user = userRepository.findByEmailIgnoreCase(email)
         .orElseThrow(() -> new BadRequestException("Invalid refresh token"));
-    if (!jwtService.isValid(request.refreshToken(), user)) {
+    if (!jwtService.isValid(refreshToken, user, "refresh")) {
       throw new BadRequestException("Invalid refresh token");
     }
     return tokens(user);
@@ -207,8 +214,9 @@ public class AuthService {
     return new AuthResponse(
         jwtService.generateAccessToken(user),
         jwtService.generateRefreshToken(user),
-        "Bearer",
-        UserSummary.from(user)
+        "Cookie",
+        UserSummary.from(user),
+        null
     );
   }
 }

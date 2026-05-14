@@ -24,49 +24,52 @@ import org.hibernate.dialect.PostgreSQLEnumJdbcType;
 @Setter
 @NoArgsConstructor
 @Entity
-@Table(name = "payments")
-public class Payment {
+@Table(name = "payment_audit_events")
+public class PaymentAuditEvent {
   @Id
   @GeneratedValue(strategy = GenerationType.UUID)
   private UUID id;
+
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "payment_id")
+  private Payment payment;
 
   @ManyToOne(fetch = FetchType.LAZY, optional = false)
   @JoinColumn(name = "order_id")
   private LaundryOrder order;
 
   @ManyToOne(fetch = FetchType.LAZY)
-  @JoinColumn(name = "collected_by")
-  private User collectedBy;
+  @JoinColumn(name = "actor_id")
+  private User actor;
 
-  @Column(nullable = false)
-  private BigDecimal amount;
+  @Column(name = "actor_type", nullable = false, length = 32)
+  private String actorType;
+
+  @Column(nullable = false, length = 80)
+  private String action;
 
   @Enumerated(EnumType.STRING)
   @JdbcType(PostgreSQLEnumJdbcType.class)
-  @Column(name = "payment_type", nullable = false, columnDefinition = "payment_type")
-  private PaymentType paymentType;
+  @Column(name = "previous_payment_status", columnDefinition = "payment_status")
+  private PaymentStatus previousPaymentStatus;
 
-  @Column(name = "collected_at", nullable = false)
-  private Instant collectedAt = Instant.now();
+  @Enumerated(EnumType.STRING)
+  @JdbcType(PostgreSQLEnumJdbcType.class)
+  @Column(name = "new_payment_status", columnDefinition = "payment_status")
+  private PaymentStatus newPaymentStatus;
 
-  @Column(name = "payment_reference")
-  private String paymentReference;
+  @Column(name = "previous_paid_amount")
+  private BigDecimal previousPaidAmount;
 
-  @Column(name = "payer_phone")
-  private String payerPhone;
+  @Column(name = "new_paid_amount")
+  private BigDecimal newPaidAmount;
 
+  @Column(columnDefinition = "text")
   private String notes;
 
-  @Column(name = "is_verified", nullable = false)
-  private boolean verified;
+  @Column(columnDefinition = "text")
+  private String metadata;
 
-  @Column(name = "applied_to_balance", nullable = false)
-  private boolean appliedToBalance = true;
-
-  @ManyToOne(fetch = FetchType.LAZY)
-  @JoinColumn(name = "verified_by")
-  private User verifiedBy;
-
-  @Column(name = "verified_at")
-  private Instant verifiedAt;
+  @Column(name = "created_at", nullable = false)
+  private Instant createdAt = Instant.now();
 }

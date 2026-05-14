@@ -46,9 +46,23 @@ public class JwtService {
         .getSubject();
   }
 
+  public String tokenUse(String token) {
+    return Jwts.parser()
+        .verifyWith(signingKey())
+        .build()
+        .parseSignedClaims(token)
+        .getPayload()
+        .get("token_use", String.class);
+  }
+
   public boolean isValid(String token, User user) {
+    return isValid(token, user, null);
+  }
+
+  public boolean isValid(String token, User user, String expectedUse) {
     try {
-      return user.getEmail().equalsIgnoreCase(subject(token));
+      boolean subjectMatches = user.getEmail().equalsIgnoreCase(subject(token));
+      return subjectMatches && (expectedUse == null || expectedUse.equals(tokenUse(token)));
     } catch (RuntimeException ex) {
       return false;
     }

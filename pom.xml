@@ -20,6 +20,7 @@
   <properties>
     <java.version>17</java.version>
     <jjwt.version>0.12.6</jjwt.version>
+    <sentry.version>8.41.0</sentry.version>
   </properties>
 
   <dependencies>
@@ -75,6 +76,11 @@
       <groupId>org.springframework.security</groupId>
       <artifactId>spring-security-test</artifactId>
       <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.sentry</groupId>
+      <artifactId>sentry-spring-boot-starter-jakarta</artifactId>
+      <version>${sentry.version}</version>
     </dependency>
 
     <!-- PDF generation (LGPL, free for commercial use) -->

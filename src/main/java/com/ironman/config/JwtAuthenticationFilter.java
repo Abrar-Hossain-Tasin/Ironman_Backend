@@ -2,6 +2,7 @@ package com.ironman.config;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
@@ -43,18 +44,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
   @Override
   protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
       throws ServletException, IOException {
-    String header = request.getHeader("Authorization");
-    if (header == null || !header.startsWith("Bearer ")) {
+    String token = bearerToken(request);
+    if (token == null) {
       filterChain.doFilter(request, response);
       return;
     }
 
-    String token = header.substring(7);
     try {
       String email = jwtService.subject(token);
       if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
         var userDetails = userDetailsService.loadUserByUsername(email);
-        if (jwtService.isValid(token, (com.ironman.model.User) userDetails)) {
+        if (jwtService.isValid(token, (com.ironman.model.User) userDetails, "access")) {
           var authToken = new UsernamePasswordAuthenticationToken(
               userDetails,
               null,
@@ -69,5 +69,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     filterChain.doFilter(request, response);
+  }
+
+  private String bearerToken(HttpServletRequest request) {
+    String header = request.getHeader("Authorization");
+    if (header != null && header.startsWith("Bearer ")) {
+      return header.substring(7);
+    }
+    Cookie[] cookies = request.getCookies();
+    if (cookies == null) return null;
+    for (Cookie cookie : cookies) {
+      if (AuthCookieService.ACCESS_COOKIE.equals(cookie.getName())
+          && cookie.getValue() != null
+          && !cookie.getValue().isBlank()) {
+        return cookie.getValue();
+      }
+    }
+    return null;
   }
 }

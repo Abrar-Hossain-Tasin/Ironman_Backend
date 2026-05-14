@@ -20,6 +20,11 @@ public class GlobalExceptionHandler {
     return problem(HttpStatus.BAD_REQUEST, "Invalid request", ex.getMessage());
   }
 
+  @ExceptionHandler(UnauthorizedException.class)
+  ProblemDetail unauthorized(UnauthorizedException ex) {
+    return problem(HttpStatus.UNAUTHORIZED, "Unauthorized", ex.getMessage());
+  }
+
   @ExceptionHandler(MethodArgumentNotValidException.class)
   ProblemDetail validation(MethodArgumentNotValidException ex) {
     String detail = ex.getBindingResult().getFieldErrors().stream()

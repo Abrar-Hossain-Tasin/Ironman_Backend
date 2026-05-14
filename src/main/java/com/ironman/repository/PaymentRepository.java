@@ -4,6 +4,7 @@ import com.ironman.model.Payment;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -15,7 +16,11 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID> {
 
   List<Payment> findAllByOrderByCollectedAtDesc();
 
+  List<Payment> findByAppliedToBalanceFalseOrderByCollectedAtDesc();
+
   boolean existsByPaymentReferenceIgnoreCase(String paymentReference);
+
+  Optional<Payment> findByPaymentReferenceIgnoreCase(String paymentReference);
 
   /** Payments for any of these orders. Used by the customer-detail envelope. */
   List<Payment> findByOrderIdInOrderByCollectedAtDesc(java.util.Collection<UUID> orderIds);
