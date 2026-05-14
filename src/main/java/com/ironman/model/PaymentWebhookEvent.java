@@ -38,7 +38,7 @@ public class PaymentWebhookEvent {
   @Column(name = "idempotency_key", nullable = false, length = 200)
   private String idempotencyKey;
 
-  @Column(name = "payload_sha256", nullable = false, length = 64)
+  @Column(name = "payload_sha256", nullable = false, columnDefinition = "char(64)")
   private String payloadSha256;
 
   @Column(name = "signature_header", columnDefinition = "text")
